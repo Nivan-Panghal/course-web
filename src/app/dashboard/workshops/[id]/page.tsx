@@ -25,9 +25,11 @@ import { removePublicFile, uploadPolicyDoc, uploadPublicImage } from '@/lib/stor
 import { parseContactDetails } from '@/lib/contact-details'
 import { parseSocialLinks } from '@/lib/social-links'
 import { LANDING_LANGUAGES, LANDING_LEVELS } from '@/lib/landing-options'
-import { ArrowLeft, Check, Copy, ExternalLink, AlertTriangle, Users } from 'lucide-react'
+import { ArrowLeft, Check, Copy, ExternalLink, AlertTriangle, Users, Sparkles } from 'lucide-react'
 import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl } from '@/components/WorkshopFormFields'
 import { StringListEditor, AgendaEditor, FaqEditor } from '@/components/WorkshopListEditors'
+import WorkshopAiAssistant from '@/components/WorkshopAiAssistant'
+import type { AiSuggestions } from '@/lib/workshop-ai'
 import { ImageUploadField, PolicyDocField, TestimonialsEditor } from '@/components/WorkshopMediaFields'
 import { BonusesEditor, CustomSectionsEditor, FontPairPicker, SectionList, ThemePicker, ToggleSwitch } from '@/components/WorkshopDesignFields'
 import { DEFAULT_LANDING_THEME_ID } from '@/lib/landing-themes'
@@ -167,6 +169,7 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
   const [error, setError] = useState('')
   const [statusBusy, setStatusBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
 
   const set = <K extends keyof WorkshopForm>(key: K, value: WorkshopForm[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
@@ -336,6 +339,22 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
     })
   }
 
+  /** Fill the form with the AI suggestions the creator picked. Nothing is saved until Save. */
+  function applyAi(patch: AiSuggestions) {
+    setForm(prev => ({
+      ...prev,
+      ...(patch.tagline !== undefined ? { tagline: patch.tagline } : {}),
+      ...(patch.description !== undefined ? { description: patch.description } : {}),
+      ...(patch.takeaways ? { takeaways: patch.takeaways } : {}),
+      ...(patch.audience ? { audience: patch.audience } : {}),
+      ...(patch.bring ? { bring: patch.bring } : {}),
+      ...(patch.agenda ? { agenda: patch.agenda } : {}),
+      ...(patch.faq ? { faq: patch.faq } : {}),
+      ...(patch.aboutHost !== undefined ? { aboutHost: patch.aboutHost } : {}),
+    }))
+    setAiOpen(false)
+  }
+
   function toggleLanguage(language: string) {
     set('languages', form.languages.includes(language)
       ? form.languages.filter(l => l !== language)
@@ -433,6 +452,21 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
                 : `This workshop is marked ${workshopStatusLabel(status).toLowerCase()}, so its page is closed to new registrations.`}
             </p>
           )}
+        </div>
+
+        {/* AI helper */}
+        <div className="flex items-center justify-between gap-4 flex-wrap rounded-2xl p-4 mb-6"
+          style={{ background: 'rgba(var(--kurso-primary-rgb), 0.08)', border: '1px solid rgba(var(--kurso-primary-rgb), 0.25)' }}>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">Not sure what to write?</p>
+            <p className="text-[13px]" style={{ color: 'var(--kurso-text-muted)' }}>
+              Describe your workshop and AI drafts the tagline, description, takeaways, agenda and FAQ. You review everything first.
+            </p>
+          </div>
+          <button type="button" onClick={() => setAiOpen(true)}
+            className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white violet-gradient hover:opacity-90">
+            <Sparkles className="w-4 h-4" /> Write with AI
+          </button>
         </div>
 
         {/* Tabs */}
@@ -759,6 +793,25 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
           </div>
         )}
       </main>
+
+      {aiOpen && (
+        <WorkshopAiAssistant
+          workshopId={id}
+          onClose={() => setAiOpen(false)}
+          onApply={applyAi}
+          context={{
+            title: form.title,
+            priceLabel: form.pricing === 'paid' && form.price ? `₹${form.price}` : 'Free',
+            durationMinutes: parseInt(form.duration, 10) || null,
+            hostName: form.hostName,
+            hostTitle: form.hostTitle,
+          }}
+          current={{
+            tagline: form.tagline, description: form.description, takeaways: form.takeaways, audience: form.audience,
+            bring: form.bring, agenda: form.agenda, faq: form.faq, aboutHost: form.aboutHost,
+          }}
+        />
+      )}
 
       {/* Sticky save bar */}
       <div className="fixed bottom-0 left-0 right-0 md:left-56 z-30 px-4 md:px-8 py-3 flex items-center justify-between gap-4"
