@@ -20,6 +20,7 @@ import { slugify } from '@/lib/utils'
 import { ArrowLeft, Check, Copy, ExternalLink, ChevronDown, AlertTriangle } from 'lucide-react'
 import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl } from '@/components/WorkshopFormFields'
 import { StringListEditor } from '@/components/WorkshopListEditors'
+import AiFieldAssist from '@/components/AiFieldAssist'
 import {
   WORKSHOP_DURATION_OPTIONS,
   WORKSHOP_LIMITS,
@@ -258,12 +259,18 @@ export default function CreateWorkshopPage() {
               hint="Shown right under the title. Say what people walk away with.">
               <TextInput id="ws-tagline" value={tagline} onChange={setTagline} maxLength={MAX_TAGLINE_LENGTH}
                 placeholder="e.g. Live, hands-on, with ready-to-use templates" />
+              <AiFieldAssist field="tagline" entityType="workshop"
+                context={{ title, tagline, description, hostName, hostTitle, pricing, price }}
+                currentValue={tagline} onResult={v => typeof v === 'string' && setTagline(v)} className="mt-1.5" />
             </FormField>
 
             <FormField label="Description" htmlFor="ws-description" tag="optional" counter={`${description.length}/${WORKSHOP_LIMITS.description}`}
               hint="A few lines about the workshop. Also used for Google search results.">
               <TextArea id="ws-description" rows={4} value={description} onChange={setDescription} maxLength={WORKSHOP_LIMITS.description}
                 placeholder="What will you cover, and who is it for?" />
+              <AiFieldAssist field="description" entityType="workshop"
+                context={{ title, tagline, description, hostName, hostTitle, pricing, price }}
+                currentValue={description} onResult={v => typeof v === 'string' && setDescription(v)} className="mt-1.5" />
             </FormField>
           </FormCard>
 
@@ -325,6 +332,9 @@ export default function CreateWorkshopPage() {
             <StringListEditor value={takeaways} onChange={setTakeaways}
               max={WORKSHOP_LIMITS.takeaways} itemMaxLength={WORKSHOP_LIMITS.takeawayLength}
               ariaLabel="Takeaway" placeholders={['e.g. Pick a profitable niche in 15 minutes', 'Another takeaway']} />
+            <AiFieldAssist field="takeaways" entityType="workshop"
+              context={{ title, tagline, description, hostName, hostTitle, pricing, price }}
+              currentValue={takeaways} onResult={v => Array.isArray(v) && setTakeaways(v as string[])} className="mt-1" />
           </FormCard>
 
           <FormCard title="Joining link" tag="recommended"

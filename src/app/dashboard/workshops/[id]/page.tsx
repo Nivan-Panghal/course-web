@@ -30,6 +30,7 @@ import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl
 import { StringListEditor, AgendaEditor, FaqEditor } from '@/components/WorkshopListEditors'
 import WorkshopAiAssistant from '@/components/WorkshopAiAssistant'
 import type { AiSuggestions } from '@/lib/workshop-ai'
+import AiFieldAssist from '@/components/AiFieldAssist'
 import { ImageUploadField, PolicyDocField, TestimonialsEditor } from '@/components/WorkshopMediaFields'
 import { BonusesEditor, CustomSectionsEditor, FontPairPicker, SectionList, ThemePicker, ToggleSwitch } from '@/components/WorkshopDesignFields'
 import { DEFAULT_LANDING_THEME_ID } from '@/lib/landing-themes'
@@ -361,6 +362,24 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
       : [...form.languages, language])
   }
 
+  // ─── AI context ────────────────────────────────────────────────────────────
+  // Collects all currently-filled text fields so the AI has full context
+  // for whichever single field it's writing. Rebuilt on every render (cheap).
+  const aiContext = {
+    title: form.title,
+    tagline: form.tagline,
+    description: form.description,
+    hostName: form.hostName,
+    hostTitle: form.hostTitle,
+    aboutHost: form.aboutHost,
+    takeaways: form.takeaways.filter(Boolean),
+    audience: form.audience.filter(Boolean),
+    bring: form.bring.filter(Boolean),
+    pricing: form.pricing,
+    price: form.price,
+    duration: form.duration,
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (loading || notFound) {
@@ -493,11 +512,15 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
                 hint="Shown right under the title. Say what people walk away with.">
                 <TextInput id="ws-tagline" value={form.tagline} onChange={v => set('tagline', v)} maxLength={MAX_TAGLINE_LENGTH}
                   placeholder="e.g. Live, hands-on, with ready-to-use templates" />
+                <AiFieldAssist field="tagline" entityType="workshop" context={aiContext} currentValue={form.tagline}
+                  onResult={v => set('tagline', typeof v === 'string' ? v : '')} className="mt-1.5" />
               </FormField>
               <FormField label="Description" htmlFor="ws-description" tag="optional" counter={`${form.description.length}/${WORKSHOP_LIMITS.description}`}
                 hint="A few lines about the workshop. Also used for Google search results.">
                 <TextArea id="ws-description" rows={4} value={form.description} onChange={v => set('description', v)}
                   maxLength={WORKSHOP_LIMITS.description} placeholder="What will you cover, and who is it for?" />
+                <AiFieldAssist field="description" entityType="workshop" context={aiContext} currentValue={form.description}
+                  onResult={v => set('description', typeof v === 'string' ? v : '')} className="mt-1.5" />
               </FormField>
             </FormCard>
 
@@ -593,6 +616,8 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
               <FormField label="About the host" htmlFor="ws-about" tag="optional" counter={`${form.aboutHost.length}/${WORKSHOP_CONTENT_LIMITS.aboutHost}`}>
                 <TextArea id="ws-about" rows={4} value={form.aboutHost} onChange={v => set('aboutHost', v)}
                   maxLength={WORKSHOP_CONTENT_LIMITS.aboutHost} placeholder="Your background and why people should learn from you." />
+                <AiFieldAssist field="aboutHost" entityType="workshop" context={aiContext} currentValue={form.aboutHost}
+                  onResult={v => set('aboutHost', typeof v === 'string' ? v : '')} className="mt-1.5" />
               </FormField>
 
               <FormField label="Co-hosts" tag="optional" hint="Add anyone teaching alongside you.">
@@ -605,6 +630,8 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
               <StringListEditor value={form.takeaways} onChange={v => set('takeaways', v)}
                 max={WORKSHOP_LIMITS.takeaways} itemMaxLength={WORKSHOP_LIMITS.takeawayLength}
                 ariaLabel="Takeaway" placeholders={['e.g. Pick a profitable niche in 15 minutes', 'Another takeaway']} />
+              <AiFieldAssist field="takeaways" entityType="workshop" context={aiContext} currentValue={form.takeaways}
+                onResult={v => Array.isArray(v) && set('takeaways', v as string[])} className="mt-1" />
             </FormCard>
 
             <FormCard title="Quick facts" tag="optional" description="Shown as small labels near the top of your page.">
@@ -634,12 +661,16 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
               <StringListEditor value={form.audience} onChange={v => set('audience', v)}
                 max={WORKSHOP_CONTENT_LIMITS.listItems} itemMaxLength={WORKSHOP_CONTENT_LIMITS.listItemLength}
                 ariaLabel="Audience" placeholders={['e.g. Freelancers who want more clients', 'Another audience']} />
+              <AiFieldAssist field="audience" entityType="workshop" context={aiContext} currentValue={form.audience}
+                onResult={v => Array.isArray(v) && set('audience', v as string[])} className="mt-1" />
             </FormCard>
 
             <FormCard title="What to bring" tag="optional" description="Anything attendees should prepare or have ready.">
               <StringListEditor value={form.bring} onChange={v => set('bring', v)}
                 max={WORKSHOP_CONTENT_LIMITS.listItems} itemMaxLength={WORKSHOP_CONTENT_LIMITS.listItemLength}
                 ariaLabel="Item to bring" placeholders={['e.g. A laptop with Google Sheets open', 'Another item']} />
+              <AiFieldAssist field="bring" entityType="workshop" context={aiContext} currentValue={form.bring}
+                onResult={v => Array.isArray(v) && set('bring', v as string[])} className="mt-1" />
             </FormCard>
 
             <FormCard title="Agenda" tag="optional" description="What happens during the session, step by step.">
@@ -669,6 +700,11 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
             <FormCard title="FAQ" tag="optional" description="Answer the questions people ask before they register.">
               <FaqEditor value={form.faq} onChange={v => set('faq', v)}
                 max={WORKSHOP_CONTENT_LIMITS.faqItems} questionMax={WORKSHOP_CONTENT_LIMITS.faqQuestion} answerMax={WORKSHOP_CONTENT_LIMITS.faqAnswer} />
+              <AiFieldAssist field="faq" entityType="workshop" context={aiContext} currentValue={form.faq.map(f => f.question)}
+                onResult={v => {
+                  const faq = cleanFaq(v)
+                  if (faq.length > 0) set('faq', faq)
+                }} className="mt-1" />
             </FormCard>
 
             <FormCard title="Custom sections" tag="optional" description="Add your own text and images anywhere on the page. Reorder them in the Design tab.">

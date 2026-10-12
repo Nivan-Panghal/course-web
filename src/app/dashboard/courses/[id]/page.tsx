@@ -30,6 +30,7 @@ import {
 import { MAX_CUSTOM_SECTIONS_PER_COURSE, MAX_CUSTOM_HEADING_LENGTH, MAX_CUSTOM_BODY_LENGTH } from '@/lib/customSectionText'
 import { MAX_POLICY_FILE_BYTES, POLICY_DOC_LABELS, type PolicyDocType } from '@/lib/policyDocs'
 import { CERT_PALETTES, getCertLayoutPalette } from '@/lib/certPalettes'
+import AiFieldAssist from '@/components/AiFieldAssist'
 import { Gift, AlertTriangle as AlertTriangleIcon, FileText as FileTextIcon, Timer as TimerIcon, X as XIcon, Image as ImageIconLucide, FlaskConical } from 'lucide-react'
 
 import {
@@ -4024,6 +4025,13 @@ export default function CourseManagePage({
 
                             <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={5}
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--kurso-primary)] resize-none" />
+                            <AiFieldAssist
+                              field="description" entityType="course"
+                              context={{ name: course?.name, description: editDesc, about_creator: editAbout, what_you_will_learn: editLearn.filter(Boolean), target_audience: editTargetAudience?.filter(Boolean) }}
+                              currentValue={editDesc}
+                              onResult={v => typeof v === 'string' && setEditDesc(v)}
+                              className="mt-2"
+                            />
                           </div>
                         </SettingsGroup>
 
@@ -4529,6 +4537,13 @@ Message us on WhatsApp with your order email and we'll process it within 5 busin
                               ))}
                               <button onClick={() => setEditLearn([...editLearn, ''])}
                                 className="text-sm text-[var(--kurso-primary-light)] hover:text-[var(--kurso-primary)] w-fit font-medium">+ Add Point</button>
+                              <AiFieldAssist
+                                field="what_you_will_learn" entityType="course"
+                                context={{ name: course?.name, description: editDesc, what_you_will_learn: editLearn.filter(Boolean) }}
+                                currentValue={editLearn.filter(Boolean)}
+                                onResult={v => Array.isArray(v) && setEditLearn(v as string[])}
+                                className="mt-1"
+                              />
                             </div>
                           </div>
                         </SettingsGroup>
@@ -4618,6 +4633,13 @@ Message us on WhatsApp with your order email and we'll process it within 5 busin
                             />
                             <textarea value={editAbout} onChange={e => setEditAbout(e.target.value)} rows={5} placeholder="Bio"
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none resize-none" />
+                            <AiFieldAssist
+                              field="about_creator" entityType="course"
+                              context={{ name: course?.name, description: editDesc, hostName: editHostName, instructor_title: editInstructorTitle, about_creator: editAbout }}
+                              currentValue={editAbout}
+                              onResult={v => typeof v === 'string' && setEditAbout(v)}
+                              className="mt-2"
+                            />
                           </div>
 
                           <div>
@@ -4960,6 +4982,17 @@ Message us on WhatsApp with your order email and we'll process it within 5 busin
                             ))}
                             <button onClick={() => setEditFaq([...editFaq, { question: '', answer: '' }])}
                               className="text-xs text-[var(--kurso-primary-light)] hover:text-[var(--kurso-primary)] w-fit font-medium">+ Add FAQ</button>
+                            <AiFieldAssist
+                              field="faq" entityType="course"
+                              context={{ name: course?.name, description: editDesc, what_you_will_learn: editLearn.filter(Boolean), target_audience: editTargetAudience?.filter(Boolean) }}
+                              currentValue={editFaq.map(f => f.question).filter(Boolean)}
+                              onResult={v => {
+                                if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null && 'question' in v[0]) {
+                                  setEditFaq(v as { question: string; answer: string }[])
+                                }
+                              }}
+                              className="mt-1"
+                            />
                           </div>
 
                         </SettingsGroup>

@@ -8,6 +8,7 @@ import { ArrowRight, ArrowLeft, Globe, MessageCircle, Send, Plus, X, Code2, Wall
 import CoInstructorsEditor, { type CoInstructor } from '@/components/CoInstructorsEditor'
 import DeliveryMethodPicker from '@/components/DeliveryMethodPicker'
 import SectionDivider from '@/components/SectionDivider'
+import AiFieldAssist from '@/components/AiFieldAssist'
 import { getEffectivePlanId } from '@/lib/kurso-checkout'
 import { PLAN_ORDER, planCoversDeliveryMethod, type SubscriptionPlanId } from '@/app/api/razorpay/subscription-plans'
 
@@ -449,6 +450,13 @@ export default function CreateCoursePage() {
                       onFocus={e => e.target.style.borderColor = 'var(--kurso-primary)'}
                       onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
+                    <AiFieldAssist
+                      field="description" entityType="course"
+                      context={{ name, description, hostName, aboutCreator, what_you_will_learn: whatYouWillLearn.filter(Boolean) }}
+                      currentValue={description}
+                      onResult={v => typeof v === 'string' && setDescription(v)}
+                      className="mt-2"
+                    />
                   </Field>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -569,6 +577,13 @@ export default function CreateCoursePage() {
                         <Plus className="w-3.5 h-3.5" />
                         Add Point
                       </button>
+                      <AiFieldAssist
+                        field="what_you_will_learn" entityType="course"
+                        context={{ name, description, hostName, what_you_will_learn: whatYouWillLearn.filter(Boolean) }}
+                        currentValue={whatYouWillLearn.filter(Boolean)}
+                        onResult={v => Array.isArray(v) && setWhatYouWillLearn(v as string[])}
+                        className="mt-1"
+                      />
                     </div>
                   </Field>
 
@@ -637,6 +652,13 @@ export default function CreateCoursePage() {
                       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                       onFocus={e => e.target.style.borderColor = 'var(--kurso-primary)'}
                       onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    />
+                    <AiFieldAssist
+                      field="about_creator" entityType="course"
+                      context={{ name, description, hostName, instructorTitle, about_creator: aboutCreator }}
+                      currentValue={aboutCreator}
+                      onResult={v => typeof v === 'string' && setAboutCreator(v)}
+                      className="mt-2"
                     />
                   </Field>
 
