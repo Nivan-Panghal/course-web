@@ -210,7 +210,7 @@ export default function AiFieldAssist({
             rows={2}
             value={reprompt}
             onChange={e => setReprompt(e.target.value)}
-            placeholder="Tell the AI what to change, e.g. "Make it shorter and less formal""
+            placeholder={'Tell the AI what to change, e.g. "Make it shorter and less formal"'}
             className="flex-1 px-3 py-2 rounded-xl text-[13px] text-white outline-none resize-none"
             style={{
               background: 'rgba(255,255,255,0.05)',
