@@ -18,16 +18,17 @@ import { getCertLayoutPalette, type CertPalette } from './certPalettes'
 export type CertTemplate = 'classic' | 'modern' | 'gold' | 'minimal' | 'royal'
 
 export const CERT_TEMPLATES: { id: CertTemplate; label: string; preview: string }[] = [
-  { id: 'classic', label: 'Classic',  preview: 'White · Navy border · Gold accents · Times-Roman' },
-  { id: 'modern',  label: 'Modern',   preview: 'Dark background · Violet accents · Helvetica' },
-  { id: 'gold',    label: 'Gold',     preview: 'Ivory · Ornate gold borders · Warm palette' },
-  { id: 'minimal', label: 'Minimal',  preview: 'Pure white · Single violet bar · Ultra clean' },
-  { id: 'royal',   label: 'Royal',    preview: 'Deep navy · Gold typography · Premium feel' },
+  { id: 'classic', label: 'Classic', preview: 'White · Navy border · Gold accents · Times-Roman' },
+  { id: 'modern', label: 'Modern', preview: 'Dark background · Violet accents · Helvetica' },
+  { id: 'gold', label: 'Gold', preview: 'Ivory · Ornate gold borders · Warm palette' },
+  { id: 'minimal', label: 'Minimal', preview: 'Pure white · Single violet bar · Ultra clean' },
+  { id: 'royal', label: 'Royal', preview: 'Deep navy · Gold typography · Premium feel' },
 ]
 
-interface DrawData {
+interface DrawData { /** 'workshop' changes the wording to "Certificate of Participation ... attended". Default: course. */
+  kind?: 'course' | 'workshop';
   studentName: string
-  courseName:  string
+  courseName: string
   creatorName: string
   certificateId: string
   issuedAt: Date
@@ -40,6 +41,17 @@ interface DrawData {
 }
 
 type CertAssets = { logoImage?: any; signatureImage?: any; qrImage?: any }
+
+// Wording that changes between course and workshop certificates.
+function certHeading(d: DrawData): string {
+  return d.kind === 'workshop' ? 'CERTIFICATE OF PARTICIPATION' : 'CERTIFICATE OF COMPLETION'
+}
+function certDoneLine(d: DrawData, opts: { noun?: boolean; upper?: boolean } = {}): string {
+  const verb = d.kind === 'workshop' ? 'has successfully attended' : 'has successfully completed'
+  const noun = opts.noun ? (d.kind === 'workshop' ? ' the workshop' : ' the course') : ''
+  const line = `${verb}${noun}`
+  return opts.upper ? line.toUpperCase() : line
+}
 
 // ─── Page dimensions (A4 landscape, in points) ───────────────────────────────
 const W = 841.89
@@ -185,8 +197,8 @@ function bust(url: string): string {
 // ─── Template 1: CLASSIC ─────────────────────────────────────────────────────
 // White bg · navy double border · Times-Roman · navy/gold palette
 function drawClassic(page: PDFPage, d: DrawData, tb: PDFFont, tr: PDFFont, ti: PDFFont, palette: CertPalette, assets: CertAssets = {}) {
-  const navy  = hx(palette.textPrimary)
-  const gold  = hx(palette.accent)
+  const navy = hx(palette.textPrimary)
+  const gold = hx(palette.accent)
   const dkGld = hx(palette.accentDark)
 
   // Background
@@ -214,7 +226,7 @@ function drawClassic(page: PDFPage, d: DrawData, tb: PDFFont, tr: PDFFont, ti: P
   page.drawRectangle({ x: 40, y: H - 96, width: W - 80, height: 2, color: gold })
 
   // CERTIFICATE OF COMPLETION
-  const hdr = 'CERTIFICATE OF COMPLETION'
+  const hdr = certHeading(d)
   page.drawText(hdr, { x: cx(hdr, tb, 27), y: H - 84, size: 27, font: tb, color: navy })
 
   // "This is to certify that"
@@ -230,14 +242,14 @@ function drawClassic(page: PDFPage, d: DrawData, tb: PDFFont, tr: PDFFont, ti: P
   page.drawLine({ start: { x: (W - nw) / 2 - 12, y: H - 224 }, end: { x: (W + nw) / 2 + 12, y: H - 224 }, color: gold, thickness: 1.5 })
 
   // "has successfully completed"
-  const comp = 'has successfully completed'
+  const comp = certDoneLine(d)
   page.drawText(comp, { x: cx(comp, ti, 16), y: H - 268, size: 16, font: ti, color: hx(palette.textMuted) })
 
   // Course name
   const course = fit(d.courseName, tb, 22, W - 120)
   page.drawText(course, { x: cx(course, tb, 22), y: H - 306, size: 22, font: tb, color: navy })
 
-    let contentY = H - 336
+  let contentY = H - 336
 
   if (d.customMessage) {
     const msg = fit(d.customMessage, ti, 13, W - 120)
@@ -293,7 +305,7 @@ function drawClassic(page: PDFPage, d: DrawData, tb: PDFFont, tr: PDFFont, ti: P
   const contentBottom = contentY - 6
   const footerDividerY = resolveFooterDividerY(contentBottom)
 
-    // Content-aware footer
+  // Content-aware footer
   page.drawRectangle({
     x: 40,
     y: footerDividerY,
@@ -381,7 +393,7 @@ function drawClassic(page: PDFPage, d: DrawData, tb: PDFFont, tr: PDFFont, ti: P
   // QR code (bottom-right)
   if (assets.qrImage) {
     const qrSize = 48
-        page.drawRectangle({
+    page.drawRectangle({
       x: W - 72 - qrSize,
       y: footerDividerY - 66,
       width: qrSize + 6,
@@ -491,7 +503,7 @@ function drawModern(
   }
 
   // Certificate heading
-  const hdr = 'CERTIFICATE OF COMPLETION'
+  const hdr = certHeading(d)
 
   page.drawText(hdr, {
     x: cx(hdr, bold, 22),
@@ -540,7 +552,7 @@ function drawModern(
   })
 
   // Completion text
-  const comp = 'HAS SUCCESSFULLY COMPLETED THE COURSE'
+  const comp = certDoneLine(d, { noun: true, upper: true })
 
   page.drawText(comp, {
     x: cx(comp, regular, 11),
@@ -841,7 +853,7 @@ function drawGold(
   })
 
   // Certificate heading
-  const hdr = 'CERTIFICATE OF COMPLETION'
+  const hdr = certHeading(d)
 
   page.drawText(hdr, {
     x: cx(hdr, tb, 26),
@@ -903,7 +915,7 @@ function drawGold(
   })
 
   // Completion text
-  const comp = 'has successfully completed the course'
+  const comp = certDoneLine(d, { noun: true })
 
   page.drawText(comp, {
     x: cx(comp, ti, 15),
@@ -1170,7 +1182,7 @@ function drawMinimal(
   }
 
   // Certificate label
-  page.drawText('CERTIFICATE OF COMPLETION', {
+  page.drawText(certHeading(d), {
     x: 60,
     y: H - 58,
     size: 12,
@@ -1199,7 +1211,7 @@ function drawMinimal(
   })
 
   // Completion text
-  page.drawText('has successfully completed', {
+  page.drawText(certDoneLine(d), {
     x: 60,
     y: H - 202,
     size: 14,
@@ -1501,7 +1513,7 @@ function drawRoyal(
   })
 
   // Certificate heading
-  const hdr = 'CERTIFICATE OF COMPLETION'
+  const hdr = certHeading(d)
 
   page.drawText(hdr, {
     x: cx(hdr, tb, 25),
@@ -1563,7 +1575,7 @@ function drawRoyal(
   })
 
   // Completion text
-  const comp = 'has successfully completed'
+  const comp = certDoneLine(d)
 
   page.drawText(comp, {
     x: cx(comp, ti, 15),
@@ -1766,13 +1778,13 @@ function drawRoyal(
 
 // ─── Main: generate PDF bytes ─────────────────────────────────────────────────
 
-export async function generateCertificatePDF(data: {
-  studentName:   string
-  courseName:    string
-  creatorName:   string
+export async function generateCertificatePDF(data: { kind?: 'course' | 'workshop'
+  studentName: string
+  courseName: string
+  creatorName: string
   certificateId: string
-  issuedAt:      Date
-  template:      CertTemplate
+  issuedAt: Date
+  template: CertTemplate
   paletteId?: string | null
   customMessage?: string
   courseDuration?: string
@@ -1783,28 +1795,28 @@ export async function generateCertificatePDF(data: {
   logoUrl?: string
   signatureUrl?: string
 }): Promise<Uint8Array> {
-  const doc  = await PDFDocument.create()
+  const doc = await PDFDocument.create()
   const page = doc.addPage([W, H])
 
   // Embed all fonts upfront
-  const bold         = await doc.embedFont(StandardFonts.HelveticaBold)
-  const regular      = await doc.embedFont(StandardFonts.Helvetica)
-  const timesBold    = await doc.embedFont(StandardFonts.TimesRomanBold)
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const regular = await doc.embedFont(StandardFonts.Helvetica)
+  const timesBold = await doc.embedFont(StandardFonts.TimesRomanBold)
   const timesRegular = await doc.embedFont(StandardFonts.TimesRoman)
-  const timesItalic  = await doc.embedFont(StandardFonts.TimesRomanItalic)
+  const timesItalic = await doc.embedFont(StandardFonts.TimesRomanItalic)
 
-  const logoImage      = await embedImageFromUrl(doc, data.logoUrl)
+  const logoImage = await embedImageFromUrl(doc, data.logoUrl)
   const signatureImage = await embedImageFromUrl(doc, data.signatureUrl)
-  const qrImage        = await embedQrCode(doc, data.verificationUrl)
+  const qrImage = await embedQrCode(doc, data.verificationUrl)
   const assets = { logoImage, signatureImage, qrImage }
   const palette = getCertLayoutPalette(data.template, data.paletteId)
 
   switch (data.template) {
-    case 'modern':  drawModern (page, data, bold, regular, palette, assets); break
-    case 'gold':    drawGold   (page, data, timesBold, timesRegular, timesItalic, palette, assets); break
+    case 'modern': drawModern(page, data, bold, regular, palette, assets); break
+    case 'gold': drawGold(page, data, timesBold, timesRegular, timesItalic, palette, assets); break
     case 'minimal': drawMinimal(page, data, bold, regular, timesItalic, palette, assets); break
-    case 'royal':   drawRoyal  (page, data, timesBold, timesRegular, timesItalic, palette, assets); break
-    default:        drawClassic(page, data, timesBold, timesRegular, timesItalic, palette, assets); break
+    case 'royal': drawRoyal(page, data, timesBold, timesRegular, timesItalic, palette, assets); break
+    default: drawClassic(page, data, timesBold, timesRegular, timesItalic, palette, assets); break
   }
 
   return doc.save()
@@ -1815,17 +1827,17 @@ export async function generateCertificatePDF(data: {
 export async function issueCertificate(
   supabase: SupabaseClient,
   params: {
-    enrollmentId:  string
-    courseId:      string
-    studentId:     string | null
-    studentName:   string
-    courseName:    string
-    creatorName:   string
-    template:      CertTemplate
+    enrollmentId: string
+    courseId: string
+    studentId: string | null
+    studentName: string
+    courseName: string
+    creatorName: string
+    template: CertTemplate
     paletteId?: string | null
     customMessage?: string
     courseDuration?: string
-    
+
     instructorName?: string
     instructorTitle?: string
     skills?: string[]
@@ -1852,20 +1864,20 @@ export async function issueCertificate(
 
   // ── Build PDF ─────────────────────────────────────────────────────────────
   const pdfBytes = await generateCertificatePDF({
-    studentName:    params.studentName,
-    courseName:     params.courseName,
-    creatorName:    params.creatorName,
-    certificateId:  certId,
+    studentName: params.studentName,
+    courseName: params.courseName,
+    creatorName: params.creatorName,
+    certificateId: certId,
     issuedAt,
-    template:       params.template,
-    paletteId:      params.paletteId,
-    customMessage:  params.customMessage,
+    template: params.template,
+    paletteId: params.paletteId,
+    customMessage: params.customMessage,
     courseDuration: params.courseDuration,
     instructorName: params.instructorName,
     instructorTitle: params.instructorTitle,
-    skills:         params.skills,
-    logoUrl:        params.logoUrl,
-    signatureUrl:   params.signatureUrl,
+    skills: params.skills,
+    logoUrl: params.logoUrl,
+    signatureUrl: params.signatureUrl,
     verificationUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://kurso.in'}/certificate/${certId}`,
   })
 
@@ -1886,30 +1898,30 @@ export async function issueCertificate(
   if (existing?.certificate_id) {
     const { error: updateError } = await supabase.from('certificates').update({
       student_name: params.studentName,
-      issued_at:    issuedAt.toISOString(),
-      pdf_url:      publicUrl,
+      issued_at: issuedAt.toISOString(),
+      pdf_url: publicUrl,
     }).eq('certificate_id', existing.certificate_id)
     if (updateError) throw new Error(`Certificate update failed: ${updateError.message}`)
   } else {
     const { error: insertError } = await supabase.from('certificates').insert({
-      enrollment_id:  params.enrollmentId,
-      course_id:      params.courseId,
-      student_id:     params.studentId,
+      enrollment_id: params.enrollmentId,
+      course_id: params.courseId,
+      student_id: params.studentId,
       certificate_id: certId,
-      student_name:   params.studentName,
-      course_name:    params.courseName,
-      creator_name:   params.creatorName,
-      issued_at:      issuedAt.toISOString(),
-      pdf_url:        publicUrl,
+      student_name: params.studentName,
+      course_name: params.courseName,
+      creator_name: params.creatorName,
+      issued_at: issuedAt.toISOString(),
+      pdf_url: publicUrl,
     })
     if (insertError) throw new Error(`Certificate record failed: ${insertError.message}`)
   }
 
   // ── Update enrollment row ─────────────────────────────────────────────────
   await supabase.from('enrollments').update({
-    certificate_id:        certId,
+    certificate_id: certId,
     certificate_issued_at: issuedAt.toISOString(),
-    certificate_url:       publicUrl,
+    certificate_url: publicUrl,
   }).eq('id', params.enrollmentId)
 
   return { certificateId: certId, pdfUrl: bust(publicUrl) }

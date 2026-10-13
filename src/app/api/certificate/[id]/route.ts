@@ -32,11 +32,29 @@ export async function GET(
       .eq('certificate_id', certificateId)
       .maybeSingle()
 
-    if (error || !cert) {
-      return NextResponse.json({ error: 'Certificate not found' }, { status: 404 })
+    if (cert) return NextResponse.json(cert)
+
+    // Not a course certificate: check workshop certificates (ids start with WS-).
+    // The answer has the same shape, so the verify page works for both.
+    if (!error) {
+      const { data: ws } = await supabase
+        .from('workshop_certificates')
+        .select('certificate_id, attendee_name, workshop_title, creator_name, issued_at, pdf_url')
+        .eq('certificate_id', certificateId)
+        .maybeSingle()
+      if (ws) {
+        return NextResponse.json({
+          certificate_id: ws.certificate_id,
+          student_name: ws.attendee_name,
+          course_name: ws.workshop_title,
+          creator_name: ws.creator_name,
+          issued_at: ws.issued_at,
+          pdf_url: ws.pdf_url,
+        })
+      }
     }
 
-    return NextResponse.json(cert)
+    return NextResponse.json({ error: 'Certificate not found' }, { status: 404 })
 
   } catch (err: any) {
     console.error('[certificate/get]', err.message)

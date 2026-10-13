@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import { supabase } from '@/lib/supabase'
-import { Plus, Calendar, Users, Check, ExternalLink, Pencil, ChevronDown, AlertTriangle } from 'lucide-react'
+import { Award, Plus, Calendar, Users, Check, ExternalLink, Pencil, ChevronDown, AlertTriangle } from 'lucide-react'
 import {
   formatWorkshopDateTime,
   getWorkshopRegistrationState,
@@ -320,6 +320,11 @@ export default function WorkshopsPage() {
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium"
               style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
               <Pencil className="w-3.5 h-3.5" /> Edit
+            </Link>
+            <Link href={`/dashboard/workshops/${w.id}/certificates`}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
+              <Award className="w-3.5 h-3.5" /> Certificates
             </Link>
             {w.status === 'published' && creatorSlug && (
               <a href={registerUrl} target="_blank" rel="noopener noreferrer"

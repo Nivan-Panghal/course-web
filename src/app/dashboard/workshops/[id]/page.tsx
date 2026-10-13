@@ -25,11 +25,9 @@ import { removePublicFile, uploadPolicyDoc, uploadPublicImage } from '@/lib/stor
 import { parseContactDetails } from '@/lib/contact-details'
 import { parseSocialLinks } from '@/lib/social-links'
 import { LANDING_LANGUAGES, LANDING_LEVELS } from '@/lib/landing-options'
-import { ArrowLeft, Check, Copy, ExternalLink, AlertTriangle, Users, Sparkles } from 'lucide-react'
+import { ArrowLeft, Award, Check, Copy, ExternalLink, AlertTriangle, Sparkles, Users } from 'lucide-react'
 import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl } from '@/components/WorkshopFormFields'
 import { StringListEditor, AgendaEditor, FaqEditor } from '@/components/WorkshopListEditors'
-import WorkshopAiAssistant from '@/components/WorkshopAiAssistant'
-import type { AiSuggestions } from '@/lib/workshop-ai'
 import AiFieldAssist from '@/components/AiFieldAssist'
 import { ImageUploadField, PolicyDocField, TestimonialsEditor } from '@/components/WorkshopMediaFields'
 import { BonusesEditor, CustomSectionsEditor, FontPairPicker, SectionList, ThemePicker, ToggleSwitch } from '@/components/WorkshopDesignFields'
@@ -170,7 +168,6 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
   const [error, setError] = useState('')
   const [statusBusy, setStatusBusy] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [aiOpen, setAiOpen] = useState(false)
 
   const set = <K extends keyof WorkshopForm>(key: K, value: WorkshopForm[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
@@ -340,22 +337,6 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
     })
   }
 
-  /** Fill the form with the AI suggestions the creator picked. Nothing is saved until Save. */
-  function applyAi(patch: AiSuggestions) {
-    setForm(prev => ({
-      ...prev,
-      ...(patch.tagline !== undefined ? { tagline: patch.tagline } : {}),
-      ...(patch.description !== undefined ? { description: patch.description } : {}),
-      ...(patch.takeaways ? { takeaways: patch.takeaways } : {}),
-      ...(patch.audience ? { audience: patch.audience } : {}),
-      ...(patch.bring ? { bring: patch.bring } : {}),
-      ...(patch.agenda ? { agenda: patch.agenda } : {}),
-      ...(patch.faq ? { faq: patch.faq } : {}),
-      ...(patch.aboutHost !== undefined ? { aboutHost: patch.aboutHost } : {}),
-    }))
-    setAiOpen(false)
-  }
-
   function toggleLanguage(language: string) {
     set('languages', form.languages.includes(language)
       ? form.languages.filter(l => l !== language)
@@ -378,6 +359,7 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
     pricing: form.pricing,
     price: form.price,
     duration: form.duration,
+    level: form.level,
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -463,6 +445,10 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
             {heldSpots} {heldSpots === 1 ? 'seat' : 'seats'} taken{form.capacity ? ` of ${form.capacity}` : ''}
             <span aria-hidden>·</span>
             <Link href="/dashboard/workshops" className="underline" style={{ color: 'var(--kurso-primary-lightest)' }}>See registrations</Link>
+            <span aria-hidden>·</span>
+            <Link href={`/dashboard/workshops/${id}/certificates`} className="inline-flex items-center gap-1 underline" style={{ color: 'var(--kurso-primary-lightest)' }}>
+              <Award className="w-3.5 h-3.5" /> Certificates
+            </Link>
           </div>
           {!published && (
             <p className="text-sm mt-3" style={{ color: 'var(--kurso-text-secondary)' }}>
@@ -473,20 +459,11 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {/* AI helper */}
-        <div className="flex items-center justify-between gap-4 flex-wrap rounded-2xl p-4 mb-6"
-          style={{ background: 'rgba(var(--kurso-primary-rgb), 0.08)', border: '1px solid rgba(var(--kurso-primary-rgb), 0.25)' }}>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">Not sure what to write?</p>
-            <p className="text-[13px]" style={{ color: 'var(--kurso-text-muted)' }}>
-              Describe your workshop and AI drafts the tagline, description, takeaways, agenda and FAQ. You review everything first.
-            </p>
-          </div>
-          <button type="button" onClick={() => setAiOpen(true)}
-            className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white violet-gradient hover:opacity-90">
-            <Sparkles className="w-4 h-4" /> Write with AI
-          </button>
-        </div>
+        {/* AI tip: AI lives under each field now */}
+        <p className="flex items-center gap-2 text-[14px] mb-6" style={{ color: 'var(--kurso-hint)' }}>
+          <Sparkles className="w-4 h-4 shrink-0" style={{ color: 'var(--kurso-primary-light)' }} />
+          Stuck on what to write? Tap “Write with AI” under any field. Fill in your title and description first for better results.
+        </p>
 
         {/* Tabs */}
         <div role="tablist" className="flex flex-wrap gap-2 mb-6">
@@ -676,6 +653,8 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
             <FormCard title="Agenda" tag="optional" description="What happens during the session, step by step.">
               <AgendaEditor value={form.agenda} onChange={v => set('agenda', v)}
                 max={MAX_AGENDA_ITEMS} titleMax={MAX_AGENDA_TITLE_LENGTH} descriptionMax={MAX_AGENDA_DESCRIPTION_LENGTH} />
+              <AiFieldAssist field="agenda" entityType="workshop" context={aiContext} currentValue={form.agenda}
+                onResult={v => set('agenda', normalizeAgenda(v).slice(0, MAX_AGENDA_ITEMS))} className="mt-1" />
             </FormCard>
 
             <FormCard title="Promo videos" tag="optional" description="Up to 3 YouTube or Vimeo links, for example a short intro or a clip from a past session.">
@@ -700,7 +679,7 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
             <FormCard title="FAQ" tag="optional" description="Answer the questions people ask before they register.">
               <FaqEditor value={form.faq} onChange={v => set('faq', v)}
                 max={WORKSHOP_CONTENT_LIMITS.faqItems} questionMax={WORKSHOP_CONTENT_LIMITS.faqQuestion} answerMax={WORKSHOP_CONTENT_LIMITS.faqAnswer} />
-              <AiFieldAssist field="faq" entityType="workshop" context={aiContext} currentValue={form.faq.map(f => f.question)}
+              <AiFieldAssist field="faq" entityType="workshop" context={aiContext} currentValue={form.faq}
                 onResult={v => {
                   const faq = cleanFaq(v)
                   if (faq.length > 0) set('faq', faq)
@@ -829,25 +808,6 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
           </div>
         )}
       </main>
-
-      {aiOpen && (
-        <WorkshopAiAssistant
-          workshopId={id}
-          onClose={() => setAiOpen(false)}
-          onApply={applyAi}
-          context={{
-            title: form.title,
-            priceLabel: form.pricing === 'paid' && form.price ? `₹${form.price}` : 'Free',
-            durationMinutes: parseInt(form.duration, 10) || null,
-            hostName: form.hostName,
-            hostTitle: form.hostTitle,
-          }}
-          current={{
-            tagline: form.tagline, description: form.description, takeaways: form.takeaways, audience: form.audience,
-            bring: form.bring, agenda: form.agenda, faq: form.faq, aboutHost: form.aboutHost,
-          }}
-        />
-      )}
 
       {/* Sticky save bar */}
       <div className="fixed bottom-0 left-0 right-0 md:left-56 z-30 px-4 md:px-8 py-3 flex items-center justify-between gap-4"

@@ -4572,6 +4572,13 @@ Message us on WhatsApp with your order email and we'll process it within 5 busin
                             ))}
                             <button onClick={() => setEditRequirements([...editRequirements, ''])}
                               className="text-sm text-[var(--kurso-primary-light)] hover:text-[var(--kurso-primary)] w-fit font-medium">+ Add Requirement</button>
+                            <AiFieldAssist
+                              field="requirements" entityType="course"
+                              context={{ name: course?.name, description: editDesc, what_you_will_learn: editLearn.filter(Boolean), target_audience: editTargetAudience?.filter(Boolean) }}
+                              currentValue={editRequirements.filter(Boolean)}
+                              onResult={v => Array.isArray(v) && setEditRequirements(v.length ? (v as string[]) : [''])}
+                              className="mt-1"
+                            />
                           </div>
                         </SettingsGroup>
 
@@ -4778,6 +4785,13 @@ Message us on WhatsApp with your order email and we'll process it within 5 busin
                             ))}
                             <button onClick={() => setEditTargetAudience([...editTargetAudience, ''])}
                               className="text-sm text-[var(--kurso-primary-light)] hover:text-[var(--kurso-primary)] w-fit font-medium">+ Add Audience</button>
+                            <AiFieldAssist
+                              field="target_audience" entityType="course"
+                              context={{ name: course?.name, description: editDesc, what_you_will_learn: editLearn.filter(Boolean) }}
+                              currentValue={editTargetAudience.filter(Boolean)}
+                              onResult={v => Array.isArray(v) && setEditTargetAudience(v.length ? (v as string[]) : [''])}
+                              className="mt-1"
+                            />
                           </div>
 
                         </SettingsGroup>
