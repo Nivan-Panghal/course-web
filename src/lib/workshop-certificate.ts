@@ -33,7 +33,7 @@ export async function issueWorkshopCertificate(
     workshop: WorkshopForCertificate
     registration: { id: string; name: string }
   },
-): Promise<{ certificateId: string; pdfUrl: string }> {
+): Promise<{ certificateId: string; pdfUrl: string; pdfBytes?: Uint8Array }> {
   const { workshop, registration } = params
   const attendeeName = registration.name.trim()
 
@@ -107,5 +107,5 @@ export async function issueWorkshopCertificate(
   }
 
   // The file path is reused when a name changes, so add a version to dodge cached copies.
-  return { certificateId: certId, pdfUrl: `${publicUrl}?v=${issuedAt.getTime()}` }
+  return { certificateId: certId, pdfUrl: `${publicUrl}?v=${issuedAt.getTime()}`, pdfBytes }
 }

@@ -4,9 +4,10 @@
 // Certificates for ONE workshop (workshops only; course certificates are set up
 // inside each course). Flow:
 //   1. Turn certificates on and pick a look.
-//   2. After the workshop starts, tick who attended.
-//   3. Issue certificates. Only people marked as attended get one.
-// Settings save with the Save button. Attendance saves as soon as you tick.
+//   2. After the workshop starts, tick the people who should get a certificate.
+//   3. Tap "Issue and send". It goes out on Telegram and by email by itself.
+// Settings save with the Save button. Choosing people and tapping "Issue and send"
+// makes each certificate and sends it on Telegram and by email.
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -29,8 +30,15 @@ type Attendee = {
   name: string
   phoneEnd: string
   attended: boolean
-  certificate: { id: string; url: string } | null
+  hasTelegram: boolean
+  hasEmail: boolean
+  certificate: { id: string; url: string; sentOnTelegram: boolean; sentByEmail: boolean } | null
 }
+
+type Outcome = 'sent' | 'already_sent' | 'no_contact' | 'delivery_failed' | 'failed'
+type SendResult = { id: string; name: string; outcome: Outcome }
+
+const SEND_GROUP = 10 // people per request, kept in step with the server
 
 type Settings = { enabled: boolean; template: string; message: string; signatureUrl: string }
 
@@ -55,6 +63,7 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [issuing, setIssuing] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState('')
@@ -62,9 +71,8 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
   const dirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(saved), [settings, saved])
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings(prev => ({ ...prev, [key]: value }))
 
-  const attendedCount = attendees.filter(a => a.attended).length
-  const waiting = attendees.filter(a => a.attended && !a.certificate).length
   const issuedCount = attendees.filter(a => a.certificate).length
+  const toggle = (id: string) => setSelected(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
 
   const authHeader = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -139,55 +147,41 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
     }
   }
 
-  async function setAttendance(ids: string[], attended: boolean) {
-    if (ids.length === 0) return
-    setError('')
-    setNotice('')
-    const headers = await authHeader()
-    if (!headers) { setError('Please log in again.'); return }
-    // Show the change straight away; undo it if saving fails.
-    const previous = attendees
-    setAttendees(prev => prev.map(a => (ids.includes(a.id) ? { ...a, attended } : a)))
-    const res = await fetch('/api/workshops/certificates', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ workshopId: id, action: 'attendance', registrationIds: ids, attended }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      setAttendees(previous)
-      setError(data.error || 'Could not save attendance. Please try again.')
-    }
-  }
-
-  async function issueAll() {
-    if (issuing) return
+  async function sendCertificates(ids: string[], resend = false) {
+    if (issuing || ids.length === 0) return
     setError('')
     setNotice('')
     setIssuing(true)
     try {
       const headers = await authHeader()
       if (!headers) { setError('Please log in again.'); return }
-      let total = 0
-      let failedNames: string[] = []
-      // The server issues a few at a time; keep asking until nothing is left.
-      for (let round = 0; round < 40; round++) {
+      const all: SendResult[] = []
+      for (let i = 0; i < ids.length; i += SEND_GROUP) {
         const res = await fetch('/api/workshops/certificates', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify({ workshopId: id, action: 'issue' }),
+          body: JSON.stringify({ workshopId: id, registrationIds: ids.slice(i, i + SEND_GROUP), resend }),
         })
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) { setError(data.error || 'Could not issue certificates. Please try again.'); break }
-        total += data.issued || 0
-        failedNames = failedNames.concat((data.failed || []).map((f: { name: string }) => f.name))
-        if (!data.left || (data.issued || 0) === 0) break
+        if (!res.ok) { setError(data.error || 'Could not send certificates. Please try again.'); break }
+        all.push(...(data.results || []))
       }
       await load()
-      if (failedNames.length) {
-        setError(`Could not make a certificate for: ${failedNames.join(', ')}. Tap the button again to retry.`)
-      }
-      if (total > 0) setNotice(`${total} certificate${total === 1 ? '' : 's'} issued.`)
+      setSelected([])
+
+      const names = (o: Outcome) => all.filter(r => r.outcome === o).map(r => r.name).join(', ')
+      const sent = all.filter(r => r.outcome === 'sent').length
+      const skipped = all.filter(r => r.outcome === 'already_sent').length
+      const parts: string[] = []
+      if (sent) parts.push(`${sent} certificate${sent === 1 ? '' : 's'} sent.`)
+      if (skipped) parts.push(`${skipped} already received theirs.`)
+      if (parts.length) setNotice(parts.join(' '))
+
+      const problems: string[] = []
+      if (names('no_contact')) problems.push(`${names('no_contact')} ${all.filter(r => r.outcome === 'no_contact').length === 1 ? 'has' : 'have'} no Telegram or email, so nothing was sent. Copy their link and share it yourself.`)
+      if (names('delivery_failed')) problems.push(`We could not deliver to ${names('delivery_failed')}. Tap “Send again” in a moment.`)
+      if (names('failed')) problems.push(`Could not make a certificate for ${names('failed')}. Please try again.`)
+      if (problems.length) setError(problems.join(' '))
     } finally {
       setIssuing(false)
     }
@@ -255,7 +249,7 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
               <div>
                 <p className="text-sm font-medium text-white">Certificates are {settings.enabled ? 'on' : 'off'}</p>
                 <p className="text-[14px]" style={hint}>
-                  Only people you mark as attended will get one.
+                  You choose who gets one, and it is sent to them automatically.
                 </p>
               </div>
               <ToggleSwitch checked={settings.enabled} label="Give certificates for this workshop" onChange={v => set('enabled', v)} />
@@ -302,9 +296,9 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
           )}
 
           {settings.enabled && (
-            <FormCard title="Who attended?" description={started
-              ? 'Tick the people who joined the session, then issue their certificates.'
-              : 'You can mark attendance once the workshop has started.'}>
+            <FormCard title="Send certificates" description={started
+              ? 'Choose the people who should get a certificate. It is sent to them automatically.'
+              : 'You can send certificates once the workshop has started.'}>
               {attendees.length === 0 ? (
                 <p className="text-sm" style={hint}>
                   No confirmed registrations yet. Paid registrations show up here after payment is confirmed.
@@ -313,76 +307,85 @@ export default function WorkshopCertificatesPage({ params }: { params: Promise<{
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-[14px]" style={text2}>
-                      {attendedCount} of {attendees.length} marked as attended · {issuedCount} certificate{issuedCount === 1 ? '' : 's'} issued
+                      {selected.length} selected · {issuedCount} of {attendees.length} already have a certificate
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" disabled={!started}
-                        onClick={() => setAttendance(attendees.filter(a => !a.attended).map(a => a.id), true)}
-                        className="px-3 py-2 rounded-xl text-[13px] font-medium disabled:opacity-40"
+                      <button type="button" onClick={() => setSelected(attendees.filter(a => !a.certificate).map(a => a.id))}
+                        className="px-3 py-2 rounded-xl text-[13px] font-medium"
                         style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
-                        Mark everyone as attended
+                        Select everyone without a certificate
                       </button>
-                      {attendedCount > 0 && (
-                        <button type="button" disabled={!started}
-                          onClick={() => setAttendance(attendees.filter(a => a.attended).map(a => a.id), false)}
-                          className="px-3 py-2 rounded-xl text-[13px] font-medium disabled:opacity-40"
+                      {selected.length > 0 && (
+                        <button type="button" onClick={() => setSelected([])}
+                          className="px-3 py-2 rounded-xl text-[13px] font-medium"
                           style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--kurso-text-secondary)' }}>
-                          Clear all
+                          Clear
                         </button>
                       )}
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    {attendees.map(a => (
-                      <div key={a.id} className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-xl"
-                        style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <label className="flex items-center gap-3 min-w-0 cursor-pointer">
-                          <input type="checkbox" className="w-4 h-4 shrink-0" checked={a.attended} disabled={!started}
-                            onChange={e => setAttendance([a.id], e.target.checked)} aria-label={`${a.name} attended`} />
-                          <span className="min-w-0">
-                            <span className="block text-sm text-white truncate">{a.name}</span>
-                            <span className="block text-[13px]" style={hint}>Phone ending {a.phoneEnd}</span>
-                          </span>
-                        </label>
-
-                        {a.certificate ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[13px] flex items-center gap-1" style={{ color: 'var(--kurso-success)' }}>
-                              <Check className="w-3.5 h-3.5" /> Certificate ready
+                    {attendees.map(a => {
+                      const c = a.certificate
+                      const via = [a.hasTelegram && 'Telegram', a.hasEmail && 'email'].filter(Boolean).join(' and ')
+                      return (
+                        <div key={a.id} className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-xl"
+                          style={{ background: 'rgba(255,255,255,0.04)' }}>
+                          <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                            <input type="checkbox" className="w-4 h-4 shrink-0" checked={selected.includes(a.id)}
+                              disabled={!started || issuing} onChange={() => toggle(a.id)} aria-label={`Select ${a.name}`} />
+                            <span className="min-w-0">
+                              <span className="block text-sm text-white truncate">{a.name}</span>
+                              <span className="block text-[13px]" style={hint}>
+                                Phone ending {a.phoneEnd} ·{' '}
+                                {c
+                                  ? (c.sentOnTelegram || c.sentByEmail
+                                    ? `Sent ${[c.sentOnTelegram && 'on Telegram', c.sentByEmail && 'by email'].filter(Boolean).join(' and ')}`
+                                    : 'Certificate made, not sent yet')
+                                  : via ? `Will get it on ${via}` : 'No Telegram or email on file'}
+                              </span>
                             </span>
-                            <a href={a.certificate.url} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-medium"
-                              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
-                              <ExternalLink className="w-3.5 h-3.5" /> View
-                            </a>
-                            <button type="button" onClick={() => copyLink(a.certificate!.id)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-medium"
-                              style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
-                              {copiedId === a.certificate.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                              {copiedId === a.certificate.id ? 'Copied' : 'Copy link'}
-                            </button>
-                          </div>
-                        ) : a.attended ? (
-                          <span className="text-[13px]" style={hint}>Ready to issue</span>
-                        ) : null}
-                      </div>
-                    ))}
+                          </label>
+
+                          {c && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <a href={c.url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-medium"
+                                style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
+                                <ExternalLink className="w-3.5 h-3.5" /> View
+                              </a>
+                              <button type="button" onClick={() => copyLink(c.id)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-medium"
+                                style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--kurso-text-secondary)' }}>
+                                {copiedId === c.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                {copiedId === c.id ? 'Copied' : 'Copy link'}
+                              </button>
+                              {(a.hasTelegram || a.hasEmail) && (
+                                <button type="button" disabled={issuing || dirty} onClick={() => sendCertificates([a.id], true)}
+                                  className="px-2.5 py-1.5 rounded-lg text-[13px] font-medium disabled:opacity-40"
+                                  style={{ background: 'rgba(var(--kurso-primary-rgb), 0.15)', color: 'var(--kurso-primary-lightest)' }}>
+                                  Send again
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={issueAll} disabled={issuing || waiting === 0 || dirty}
+                    <button type="button" onClick={() => sendCertificates(selected)}
+                      disabled={issuing || selected.length === 0 || dirty || !started}
                       className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white violet-gradient hover:opacity-90 disabled:opacity-40">
-                      {issuing ? 'Making certificates…' : `Issue ${waiting || ''} certificate${waiting === 1 ? '' : 's'}`.replace('Issue  ', 'Issue ')}
+                      {issuing ? 'Sending certificates…' : selected.length ? `Issue and send to ${selected.length} ${selected.length === 1 ? 'person' : 'people'}` : 'Issue and send'}
                     </button>
-                    {dirty && <p className="text-[14px]" style={hint}>Save your changes first, then issue.</p>}
-                    {!dirty && waiting === 0 && attendedCount > 0 && (
-                      <p className="text-[14px]" style={hint}>Everyone marked as attended already has a certificate.</p>
-                    )}
+                    {dirty && <p className="text-[14px]" style={hint}>Save your changes first, then send.</p>}
                   </div>
                   {notice && <p role="status" className="text-sm" style={{ color: 'var(--kurso-success)' }}>{notice}</p>}
                   <p className="text-[14px]" style={hint}>
-                    Share the “Copy link” with each person. The link shows their certificate and lets anyone check that it is real.
+                    Certificates go out on Telegram and by email. People who have not joined your Telegram bot get the email only. Anyone you issue a certificate to is counted as having attended.
                   </p>
                 </>
               )}

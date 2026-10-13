@@ -67,7 +67,7 @@ export function FormCard({ title, description, tag, children }: {
           {tag && <FieldTag kind={tag} />}
         </div>
         {description && (
-          <p className="text-sm mt-1 leading-relaxed" style={{ color: 'var(--kurso-text-muted)' }}>{description}</p>
+          <p className="text-[13px] mt-1.5 leading-relaxed" style={{ color: 'var(--kurso-hint)' }}>{description}</p>
         )}
       </div>
       <div className="flex flex-col gap-5">{children}</div>
@@ -98,7 +98,7 @@ export function FormField({ label, htmlFor, required, tag, hint, counter, childr
       </div>
       {children}
       {hint && (
-        <p className="text-[13px] mt-1.5 leading-relaxed" style={{ color: 'var(--kurso-text-muted)' }}>{hint}</p>
+        <p className="text-[13px] mt-1.5 leading-relaxed" style={{ color: 'var(--kurso-hint)' }}>{hint}</p>
       )}
     </div>
   )
