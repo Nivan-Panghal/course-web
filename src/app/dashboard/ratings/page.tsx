@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopReviewsView from '@/components/workshop-views/WorkshopReviewsView'
 import { supabase } from '@/lib/supabase'
 import { Star, Flag, MessageCircle, AlertTriangle } from 'lucide-react'
 
@@ -19,6 +21,7 @@ type Rating = {
 }
 
 export default function RatingsPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [ratings, setRatings] = useState<Rating[]>([])
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState('')
@@ -95,9 +98,14 @@ export default function RatingsPage() {
   return (
     <div className="min-h-screen flex" style={{ background: '#050505' }}>
       <Sidebar />
-      <div className="flex-1 p-6 sm:p-10 max-w-3xl mx-auto w-full">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-1">Ratings & Reviews</h1>
+  <div className="flex-1 p-6 sm:p-10 max-w-3xl mx-auto w-full">
+    <AudienceSwitch value={audience} onChange={setAudience} />
+    {audience === 'workshops' ? (
+      <WorkshopReviewsView />
+    ) : (
+      <>
+    <div className="mb-8">
+      <h1 className="text-2xl font-bold text-white mb-1">Ratings & Reviews</h1>```
           <p className="text-sm text-zinc-400">
             Students can rate a course once their certificate is issued. You can reply publicly or flag a rating for
             manual review — there's no delete option here; flagging hides a rating from your public average right
@@ -190,8 +198,10 @@ export default function RatingsPage() {
               </div>
             ))}
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
+)}
+      </>
+    )}
+  </div>
+</div>
+
+) }

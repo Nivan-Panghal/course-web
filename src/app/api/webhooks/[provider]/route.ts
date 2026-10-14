@@ -277,7 +277,7 @@ async function handleFlowA(transaction: any, body: NormalizedEvent, signature: s
   const email = body.customer_email || transaction.student_email
   const phoneOrEmail = cleanedPhone || email
 
-    let student: any = null
+  let student: any = null
   if (email) student = await firstRow(supabaseAdmin.from('students').select('*').eq('email', email))
   if (!student && cleanedPhone) {
     const phoneMatch = await firstRow(supabaseAdmin.from('students').select('*').eq('phone', cleanedPhone))
@@ -286,7 +286,7 @@ async function handleFlowA(transaction: any, body: NormalizedEvent, signature: s
     }
   }
 
-    if (student) {
+  if (student) {
     await supabaseAdmin.from('students').update({
       email: email || undefined,
       phone: cleanedPhone || undefined,
@@ -310,7 +310,7 @@ async function handleFlowA(transaction: any, body: NormalizedEvent, signature: s
     }
   }
 
-    let existingEnrollment = await firstRow(
+  let existingEnrollment = await firstRow(
     supabaseAdmin.from('enrollments').select('*').eq('course_uuid', transaction.course_id).eq('student_id', student.id)
   )
   if (!existingEnrollment && phoneOrEmail) {
@@ -378,7 +378,7 @@ async function handleFlowA(transaction: any, body: NormalizedEvent, signature: s
     enrollmentId = newEnrollment.id
   }
 
-    const existingPayment = await firstRow(
+  const existingPayment = await firstRow(
     supabaseAdmin.from('payments').select('id').eq('enrollment_id', enrollmentId)
   )
   if (existingPayment) {
@@ -493,7 +493,7 @@ async function handleFlowAEbook(transaction: any, body: NormalizedEvent, signatu
     .select('id')
     .single()
 
-    if (paymentInsertError) {
+  if (paymentInsertError) {
     console.error(
       `[${provider}-webhook] Failed to record ebook payment — leaving transaction pending so a retry can fix it:`,
       paymentInsertError
@@ -536,8 +536,8 @@ async function handleFlowAEbook(transaction: any, body: NormalizedEvent, signatu
           <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111">
             <h2 style="margin:0 0 12px">Thanks for your purchase!</h2>
             <p style="margin:0 0 16px">Your copy of <strong>${escapeHtml(
-              ebook?.title || 'your ebook'
-            )}</strong> is ready — invoice ${invoiceRow.invoice_number} is attached.</p>
+          ebook?.title || 'your ebook'
+        )}</strong> is ready — invoice ${invoiceRow.invoice_number} is attached.</p>
             <a href="${downloadUrl}" style="display:inline-block;background:#f79514;color:white;padding:12px 18px;border-radius:10px;text-decoration:none">Download your ebook</a>
             <p style="margin:16px 0 0;font-size:12px;color:#666">This link is personal to you and limited to 5 downloads.</p>
           </div>
@@ -561,10 +561,10 @@ async function handleFlowAEbook(transaction: any, body: NormalizedEvent, signatu
           <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111">
             <h2 style="margin:0 0 12px">New ebook sale</h2>
             <p style="margin:0 0 8px"><strong>${escapeHtml(
-              invoiceRow.student_name || 'A reader'
-            )}</strong> bought <strong>${escapeHtml(
-              ebook?.title || 'your ebook'
-            )}</strong> for ₹${Number(invoiceRow.amount).toLocaleString('en-IN')}.</p>
+          invoiceRow.student_name || 'A reader'
+        )}</strong> bought <strong>${escapeHtml(
+          ebook?.title || 'your ebook'
+        )}</strong> for ₹${Number(invoiceRow.amount).toLocaleString('en-IN')}.</p>
             <p style="margin:0">Invoice ${invoiceRow.invoice_number} is attached for your records.</p>
           </div>
         `,
@@ -666,8 +666,9 @@ async function handleFlowAWorkshop(transaction: any, body: NormalizedEvent, sign
       buyer_email: email || null,
       buyer_phone: body.customer_mobile || transaction.student_phone || null,
       currency: 'INR',
-      gross_amount: body.amount,
-      discount_amount: 0,
+      // With a coupon: gross is the listed price, discount is what was taken off, net is what was paid.
+      gross_amount: transaction.original_amount ? Math.round(Number(transaction.original_amount)) : body.amount,
+      discount_amount: Math.round(Number(transaction.discount_amount) || 0),
       net_amount: body.amount,
       platform_fee: platformFee,
       creator_earning: creatorEarning,
@@ -698,9 +699,10 @@ async function handleFlowAWorkshop(transaction: any, body: NormalizedEvent, sign
   // Meta Purchase (server side), after the response. Idempotent per registration, so webhook retries can't double-count.
   scheduleWorkshopMetaEvent({ registrationId, eventName: 'Purchase' })
 
-  if (justConfirmed) {
-    try {
-      await notifyWorkshopConfirmed(registrationId)
+// Count one use of the workshop coupon (best-effort, never blocks a real payment).
+ if (justConfirmed && transaction.workshop_coupon_id) { try { await supabaseAdmin.rpc('redeem_workshop_coupon', { input_coupon_id: transaction.workshop_coupon_id }) } catch (err) { console.error('[webhook-workshop-coupon]', err) } }
+
+if (justConfirmed) { try { await notifyWorkshopConfirmed(registrationId)
     } catch (err) {
       // Best-effort — a failed message must not turn a real payment into a failed webhook.
       console.error('[webhook-workshop-notify]', err)
@@ -725,8 +727,8 @@ async function handleFlowAWorkshop(transaction: any, body: NormalizedEvent, sign
           <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111">
             <h2 style="margin:0 0 12px">You're in!</h2>
             <p style="margin:0 0 16px">Your spot for <strong>${escapeHtml(
-              workshop?.title || 'the workshop'
-            )}</strong> is confirmed — invoice ${invoiceRow.invoice_number} is attached. Join details will follow on WhatsApp.</p>
+          workshop?.title || 'the workshop'
+        )}</strong> is confirmed — invoice ${invoiceRow.invoice_number} is attached. Join details will follow on WhatsApp.</p>
           </div>
         `,
         attachments: [{ filename, content: base64Pdf }],
@@ -748,10 +750,10 @@ async function handleFlowAWorkshop(transaction: any, body: NormalizedEvent, sign
           <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111">
             <h2 style="margin:0 0 12px">New workshop registration</h2>
             <p style="margin:0 0 8px"><strong>${escapeHtml(
-              invoiceRow.student_name || 'A student'
-            )}</strong> paid <strong>₹${Number(invoiceRow.amount).toLocaleString('en-IN')}</strong> for <strong>${escapeHtml(
-              workshop?.title || invoiceRow.course_name
-            )}</strong>.</p>
+          invoiceRow.student_name || 'A student'
+        )}</strong> paid <strong>₹${Number(invoiceRow.amount).toLocaleString('en-IN')}</strong> for <strong>${escapeHtml(
+          workshop?.title || invoiceRow.course_name
+        )}</strong>.</p>
             <p style="margin:0">Invoice ${invoiceRow.invoice_number} is attached for your records.</p>
           </div>
         `,

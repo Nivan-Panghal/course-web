@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopBroadcastView from '@/components/workshop-views/WorkshopBroadcastView'
 import { supabase } from '@/lib/supabase'
 import LessonMessagesWidget from '@/components/LessonMessagesWidget'
 import { ChevronDown, MessageSquareText, BookOpen } from 'lucide-react'
@@ -11,6 +13,7 @@ interface Course {
 }
 
 export default function BroadcastPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState<string>('')
   const [token, setToken] = useState('')
@@ -44,6 +47,11 @@ export default function BroadcastPage() {
     <div className="min-h-screen bg-black">
       <Sidebar />
       <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
+        <AudienceSwitch value={audience} onChange={setAudience} />
+        {audience === 'workshops' ? (
+          <WorkshopBroadcastView />
+        ) : (
+          <>
 
         {/* Header */}
         <div className="mb-8">
@@ -61,7 +69,7 @@ export default function BroadcastPage() {
               type="button"
               onClick={() => setDropdownOpen(o => !o)}
               className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm text-left transition-all"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: selectedCourseName ? '#fff' : '#71717a' }}
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: selectedCourseName ? '#fff' : 'var(--kurso-hint)' }}
             >
               <span className="truncate">
                 {loading ? 'Loading courses…' : (selectedCourseName || (courses.length ? 'Choose a course' : 'No courses yet'))}
@@ -116,6 +124,8 @@ export default function BroadcastPage() {
           </div>
         ) : (
           <LessonMessagesWidget courseId={selectedCourse} token={token} />
+        )}
+          </>
         )}
 
       </main>

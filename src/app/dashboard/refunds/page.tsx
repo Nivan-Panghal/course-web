@@ -1,9 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopRefundsView from '@/components/workshop-views/WorkshopRefundsView'
 import { supabase } from '@/lib/supabase'
 
 export default function RefundRequestsPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [token, setToken] = useState('')
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,8 +66,13 @@ export default function RefundRequestsPage() {
   return (
     <div className="min-h-screen flex" style={{ background: '#050505' }}>
       <Sidebar />
-      <main className="flex-1 p-8 pt-20 md:pt-8 max-w-3xl mx-auto w-full">
-        <h1 className="text-2xl font-bold text-white mb-1">Refund Requests</h1>
+  <main className="flex-1 p-8 pt-20 md:pt-8 max-w-3xl mx-auto w-full">
+    <AudienceSwitch value={audience} onChange={setAudience} />
+    {audience === 'workshops' ? (
+      <WorkshopRefundsView />
+    ) : (
+      <>
+    <h1 className="text-2xl font-bold text-white mb-1">Refund Requests</h1>
         <p className="text-sm mb-8" style={{ color: '#a1a1aa' }}>
           Approving sends the refund through your connected payment gateway automatically and revokes the student's access — no manual transfer needed. Leave the amount blank for a full refund, or enter a smaller amount for a partial one.
         </p>
@@ -140,8 +148,11 @@ export default function RefundRequestsPage() {
               ))}
             </div>
           </>
-        )}
-      </main>
-    </div>
-  )
+    )}
+      </>
+    )}
+  </main>
+</div>
+
+)
 }

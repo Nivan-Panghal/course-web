@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopOverviewView from '@/components/workshop-views/WorkshopOverviewView'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import {
@@ -248,6 +250,7 @@ function BigCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [user, setUser] = useState<any>(null)
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourseId, setSelectedCourseId] = useState<string>('')
@@ -452,6 +455,11 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-black text-white">
       <Sidebar />
       <main className="md:ml-56 p-5 md:p-8 pt-20 md:pt-8 font-sans">
+        <AudienceSwitch value={audience} onChange={setAudience} />
+        {audience === 'workshops' ? (
+          <WorkshopOverviewView />
+        ) : (
+          <>
 
         {/* ── HEADER ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-7">
@@ -758,8 +766,10 @@ export default function DashboardPage() {
               ))}
             </div>
           </>
-        )}
-      </main>
-    </div>
+    )}
+      </>
+    )}
+  </main>
+</div>
   )
 }

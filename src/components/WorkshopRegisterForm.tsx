@@ -52,10 +52,44 @@ export default function WorkshopRegisterForm({
   const [linkCopied, setLinkCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Coupon (online payment only)
+  const [couponInput, setCouponInput] = useState('')
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [couponChecking, setCouponChecking] = useState(false)
+  const [couponError, setCouponError] = useState('')
+  const [coupon, setCoupon] = useState<{ code: string; percent: number; discountAmount: number; finalAmount: number } | null>(null)
 
   const isFree = price <= 0
   const hasUpi = !!upiId
   const noPaymentAvailable = !isFree && !gatewayEnabled && !hasUpi
+
+  async function applyCoupon() {
+    const code = couponInput.trim()
+    if (!code) { setCouponError('Enter your coupon code.'); return }
+    setCouponChecking(true)
+    setCouponError('')
+    try {
+      const res = await fetch('/api/workshops/coupon/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workshopId, code }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.valid) { setCouponError(data.reason || 'This coupon does not work.'); return }
+      setCoupon({ code: data.code, percent: data.percent, discountAmount: data.discountAmount, finalAmount: data.finalAmount })
+    } catch {
+      setCouponError('Could not check the coupon. Please try again.')
+    } finally {
+      setCouponChecking(false)
+    }
+  }
+
+  function removeCoupon() {
+    setCoupon(null)
+    setCouponInput('')
+    setCouponError('')
+    setCouponOpen(false)
+  }
 
   // Handles the redirect-back from Cashfree / Stripe hosted checkout.
   useEffect(() => {
@@ -101,7 +135,7 @@ export default function WorkshopRegisterForm({
     const res = await fetch('/api/workshops/checkout/create-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workshopId, name, email, phone: fullPhone, ref: refCode || null }),
+      body: JSON.stringify({ workshopId, name, email, phone: fullPhone, ref: refCode || null, couponCode: coupon?.code || null }),
     })
     const data = await res.json()
     if (!res.ok || data.error) throw new Error(data.error || 'Could not start the payment')
@@ -387,14 +421,48 @@ export default function WorkshopRegisterForm({
         </div>
       )}
 
-      {error && <p className="text-[13px]" role="alert" style={DANGER}>{error}</p>}
-      <button type="submit" disabled={loading}
-        className="w-full py-3.5 rounded-xl font-semibold text-white violet-gradient hover:opacity-90 disabled:opacity-50">
-        {loading
-          ? 'Please wait…'
+  {!isFree && gatewayEnabled && method === 'gateway' && (
+    <div>
+      {coupon ? (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-xl" style={{ background: 'rgba(var(--kurso-primary-rgb), 0.1)', border: '1px solid rgba(var(--kurso-primary-rgb), 0.3)' }}>
+          <div>
+            <p className="text-sm font-semibold" style={TEXT}>{coupon.code} applied · {coupon.percent}% off</p>
+            <p className="text-[13px]" style={MUTED}>You save ₹{coupon.discountAmount.toLocaleString('en-IN')}. You pay ₹{coupon.finalAmount.toLocaleString('en-IN')}.</p>
+          </div>
+          <button type="button" onClick={removeCoupon} className="text-[13px] underline shrink-0" style={SECONDARY}>Remove</button>
+        </div>
+      ) : couponOpen ? (
+        <div>
+          <div className="flex gap-2">
+            <input
+              value={couponInput} onChange={e => setCouponInput(e.target.value.toUpperCase())}
+              placeholder="Coupon code" aria-label="Coupon code" maxLength={20}
+              className="ws-field flex-1 min-w-0 px-4 py-3 rounded-xl text-sm outline-none" style={inputStyle}
+            />
+            <button type="button" onClick={applyCoupon} disabled={couponChecking}
+              className="px-4 rounded-xl text-sm font-semibold text-white violet-gradient hover:opacity-90 disabled:opacity-50">
+              {couponChecking ? 'Checking…' : 'Apply'}
+            </button>
+          </div>
+          {couponError && <p className="text-[13px] mt-1.5" role="alert" style={DANGER}>{couponError}</p>}
+        </div>
+      ) : (
+        <button type="button" onClick={() => setCouponOpen(true)} className="text-[13px] underline" style={SECONDARY}>Have a coupon code?</button>
+      )}
+    </div>
+  )}
+  {!isFree && gatewayEnabled && hasUpi && method === 'upi_manual' && (
+    <p className="text-[13px]" style={MUTED}>Coupons work with online payment only.</p>
+  )}
+
+  {error && <p className="text-[13px]" role="alert" style={DANGER}>{error}</p>}
+  <button type="submit" disabled={loading}
+    className="w-full py-3.5 rounded-xl font-semibold text-white violet-gradient hover:opacity-90 disabled:opacity-50">
+    {loading
+      ? 'Please wait…'
           : isFree
             ? 'Register for free'
-            : `Continue to pay ₹${price.toLocaleString()}`}
+        : `Continue to pay ₹${(method === 'gateway' && coupon ? coupon.finalAmount : price).toLocaleString()}`}
       </button>
     </form>
   )

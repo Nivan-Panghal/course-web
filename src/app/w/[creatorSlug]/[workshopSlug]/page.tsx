@@ -19,6 +19,8 @@ import Link from 'next/link'
 import { Calendar, Clock } from 'lucide-react'
 import WorkshopRegisterForm from '@/components/WorkshopRegisterForm'
 import WorkshopRegisterBar from '@/components/workshop-page/WorkshopRegisterBar'
+import WorkshopReviews from '@/components/workshop-page/WorkshopReviews'
+import { loadPublicReviews } from '@/lib/workshop-public-reviews'
 import { renderWorkshopSection, type WorkshopPageData } from '@/components/workshop-page/WorkshopSections'
 import ContactDetails from '@/components/ContactDetails'
 import SocialLinks from '@/components/SocialLinks'
@@ -174,6 +176,9 @@ export default async function WorkshopPage({
   const endIso = workshopEndsAt(workshop.date_time, workshop.duration_minutes).toISOString()
   const startsInFuture = new Date(workshop.date_time).getTime() > Date.now()
   const percentOff = discountPercent(workshop.price, workshop.original_price)
+
+  // Attendee reviews (empty if none yet, or if reviews are not set up).
+  const publicReviews = await loadPublicReviews(supabase, workshop.id)
 
   const data: WorkshopPageData = {
     startsAt,
@@ -359,6 +364,7 @@ export default async function WorkshopPage({
               </section>
             )}
             {sections.map((entry, i) => renderWorkshopSection(entry, c, data, config, `${entry.type}-${entry.customId || i}`))}
+            {publicReviews && <WorkshopReviews c={c} reviews={publicReviews} hostName={hostName} />}
           </div>
         </div>
       </div>

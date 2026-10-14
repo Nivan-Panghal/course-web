@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopCouponsView from '@/components/workshop-views/WorkshopCouponsView'
 import { supabase } from '@/lib/supabase'
 import {
   AlertCircle,
@@ -72,6 +74,7 @@ function couponState(coupon: Coupon) {
 }
 
 export default function CouponsPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [courses, setCourses] = useState<Course[]>([])
   const [coupons, setCoupons] = useState<Coupon[]>([])
   const [loading, setLoading] = useState(true)
@@ -252,10 +255,15 @@ export default function CouponsPage() {
   return (
     <div className="min-h-screen bg-black">
       <Sidebar />
-      <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-1">Coupons</h1>
+  <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
+    <AudienceSwitch value={audience} onChange={setAudience} />
+    {audience === 'workshops' ? (
+      <WorkshopCouponsView />
+    ) : (
+      <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 className="text-2xl font-bold text-white mb-1">Coupons</h1>
             <p className="text-sm" style={{ color: '#a1a1aa' }}>
               Create launch discounts, limit redemptions, and pause offers anytime.
             </p>
@@ -531,8 +539,10 @@ export default function CouponsPage() {
             })}
             </div>
           </div>
-        )}
-      </main>
-    </div>
-  )
-}
+ )}
+      </>
+    )}
+  </main>
+</div>
+
+) }

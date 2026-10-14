@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopRevenueView from '@/components/workshop-views/WorkshopRevenueView'
 import { supabase } from '@/lib/supabase'
 import {
   AlertCircle,
@@ -137,6 +139,7 @@ function statusStyle(status: string) {
 }
 
 export default function RevenuePage() {
+  const [audience, setAudience] = useAudienceMode()
   const [summary, setSummary] = useState<RevenueSummary>(emptySummary)
   const [courses, setCourses] = useState<CourseRevenue[]>([])
   const [payments, setPayments] = useState<RecentPayment[]>([])
@@ -243,10 +246,15 @@ export default function RevenuePage() {
   return (
     <div className="min-h-screen bg-black">
       <Sidebar />
-      <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-1">Revenue</h1>
+  <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
+    <AudienceSwitch value={audience} onChange={setAudience} />
+    {audience === 'workshops' ? (
+      <WorkshopRevenueView />
+    ) : (
+      <>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 className="text-2xl font-bold text-white mb-1">Revenue</h1>```
             <p className="text-sm" style={{ color: '#a1a1aa' }}>
               Track course sales, payment health, and revenue by course.
             </p>
@@ -528,9 +536,11 @@ export default function RevenuePage() {
                 )}
               </div>
             </div>
-          </>
-        )}
-      </main>
-    </div>
+                </>
+    )}
+      </>
+    )}
+  </main>
+</div>
   )
 }

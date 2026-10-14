@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopAnalyticsView from '@/components/workshop-views/WorkshopAnalyticsView'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { BarChart3, BookOpen, Users, TrendingUp } from 'lucide-react'
@@ -13,6 +15,7 @@ interface Course {
 }
 
 export default function AnalyticsIndexPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -35,9 +38,14 @@ export default function AnalyticsIndexPage() {
     <div className="min-h-screen bg-black">
       <Sidebar />
       <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
+        <AudienceSwitch value={audience} onChange={setAudience} />
+        {audience === 'workshops' ? (
+          <WorkshopAnalyticsView />
+        ) : (
+          <>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white mb-1">Analytics</h1>
-          <p className="text-sm" style={{ color: '#a1a1aa' }}>
+          <p className="text-sm" style={{ color: 'var(--kurso-hint)' }}>
             Select a course to view student drop-off and engagement data.
           </p>
         </div>
@@ -49,9 +57,9 @@ export default function AnalyticsIndexPage() {
         ) : courses.length === 0 ? (
           <div className="rounded-2xl p-16 text-center glass"
             style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-            <BarChart3 className="w-10 h-10 mx-auto mb-3" style={{ color: '#3f3f46' }} />
+            <BarChart3 className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--kurso-primary-light)' }} />
             <p className="text-sm font-medium text-white mb-1">No courses yet</p>
-            <p className="text-xs" style={{ color: '#52525b' }}>
+            <p className="text-[13px]" style={{ color: 'var(--kurso-hint)' }}>
               Create a course first to see analytics.
             </p>
           </div>
@@ -78,13 +86,15 @@ export default function AnalyticsIndexPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs truncate" style={{ color: '#52525b' }}>{course.description}</p>
+                  <p className="text-[13px] truncate" style={{ color: 'var(--kurso-hint)' }}>{course.description}</p>
                 </div>
                 <span className="text-xs flex-shrink-0 group-hover:text-violet-400 transition-colors"
-                  style={{ color: '#52525b' }}>View →</span>
+                  style={{ color: 'var(--kurso-hint)' }}>View →</span>
               </Link>
             ))}
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

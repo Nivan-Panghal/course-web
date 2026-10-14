@@ -18,7 +18,7 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { workshopId, name, email, phone: rawPhone, ref } = await req.json()
+    const { workshopId, name, email, phone: rawPhone, ref, couponCode } = await req.json()
 
     if (!workshopId || !name?.trim() || !rawPhone) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -46,15 +46,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: registrationClosedMessage(registrationState) }, { status: 409 })
     }
 
-    const amount = Number(workshop.price)
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const listedPrice = Number(workshop.price)
+    if (!Number.isFinite(listedPrice) || listedPrice <= 0) {
       return NextResponse.json({ error: 'This workshop does not require payment' }, { status: 400 })
     }
-    if (amount > 100000) {
+    if (listedPrice > 100000) {
       return NextResponse.json(
         { error: 'This amount exceeds what the payment gateway supports (₹1,00,000 max). Please contact the creator.' },
         { status: 400 }
       )
+    }
+
+    // Coupon (online checkout only). The price is always worked out here on the
+    // server; the figure the page showed is never trusted.
+    let amount = listedPrice
+    let discountAmount = 0
+    let couponId: string | null = null
+    let appliedCouponCode: string | null = null
+    const normalizedCoupon = String(couponCode || '').trim()
+    if (normalizedCoupon) {
+      const { data: couponRows, error: couponError } = await supabase.rpc('validate_coupon_for_workshop', {
+        input_workshop_id: workshopId,
+        input_coupon_code: normalizedCoupon,
+      })
+      if (couponError) throw couponError
+      const coupon = couponRows?.[0]
+      if (!coupon?.valid) {
+        return NextResponse.json({ error: coupon?.reason || 'Invalid coupon code' }, { status: 400 })
+      }
+      amount = Number(coupon.final_amount)
+      discountAmount = Number(coupon.discount_amount)
+      couponId = coupon.coupon_id
+      appliedCouponCode = coupon.coupon_code
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json({ error: 'This coupon cannot be used on this workshop.' }, { status: 400 })
+      }
     }
 
     const { data: creator } = await supabase
@@ -153,8 +179,10 @@ export async function POST(req: NextRequest) {
       student_email: email.trim(),
       student_phone: phone,
       amount,
-      original_amount: amount,
-      discount_amount: 0,
+      original_amount: listedPrice,
+      discount_amount: discountAmount,
+      // Only written when a coupon is used, so checkouts without one never touch the new column.
+      ...(couponId ? { coupon_code: appliedCouponCode, workshop_coupon_id: couponId } : {}),
       status: 'pending',
       payment_provider: gateway.provider,
     })

@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
+import AudienceSwitch, { useAudienceMode } from '@/components/AudienceSwitch'
+import WorkshopStudentsView from '@/components/workshop-views/WorkshopStudentsView'
 import { supabase } from '@/lib/supabase'
 import { Users, Search, Phone, BookOpen, Calendar, TrendingUp, RotateCcw, Upload, X, FileText, CheckCircle2, AlertCircle } from 'lucide-react'
 
@@ -19,6 +21,7 @@ interface Lesson {
 }
 
 export default function StudentsPage() {
+  const [audience, setAudience] = useAudienceMode()
   const [students, setStudents] = useState<Student[]>([])
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [loading, setLoading] = useState(true)
@@ -304,6 +307,11 @@ export default function StudentsPage() {
     <div className="min-h-screen bg-black">
       <Sidebar />
       <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8">
+        <AudienceSwitch value={audience} onChange={setAudience} />
+        {audience === 'workshops' ? (
+          <WorkshopStudentsView />
+        ) : (
+          <>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -482,9 +490,11 @@ export default function StudentsPage() {
             </div>
           </div>
         )}
-      </main>
+      </>
+    )}
+  </main>
 
-      {refundModalStudent && (
+  {refundModalStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)' }}>
           <div className="w-full max-w-sm rounded-2xl overflow-hidden"
