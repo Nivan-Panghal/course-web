@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       .select('id, name, email, telegram_chat_id')
       .eq('workshop_id', workshop.id)
       .eq('payment_status', 'confirmed')
+      .is('refunded_at', null)
     if (error) {
       console.error('[workshop-broadcast] lookup failed', error.message)
       return NextResponse.json({ error: 'Could not load the people to message.' }, { status: 500 })

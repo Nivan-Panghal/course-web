@@ -14,11 +14,101 @@ import { randomUUID } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { executeGatewayRefund, RefundExecutionError } from '@/lib/gateway-refund'
 import { getCreatorGatewayByProvider } from '@/lib/gateway-checkout'
+import { escapeHtml, sendLoggedEmail } from '@/lib/email'
 
 export const WORKSHOP_REFUND_WINDOW_DAYS = 7
 export const MAX_REFUND_REASON = 500
 
 export type RefundResult = { ok: true; message: string } | { ok: false; status: number; error: string }
+
+const SITE = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://kurso.in').replace(/\/$/, '')
+
+async function sendTelegramText(chatId: string | number, text: string): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return false
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+type RefundOutcome = 'refunded_online' | 'refunded_by_hand' | 'declined'
+
+/**
+ * Tells the student what was decided, on Telegram and by email.
+ * Best effort: it never throws and never blocks the decision itself.
+ */
+async function notifyStudentOfRefundDecision(
+  supabase: SupabaseClient,
+  p: { registrationId: string; creatorId: string; outcome: RefundOutcome; amount?: number; note: string | null },
+): Promise<{ telegram: boolean; email: boolean }> {
+  const none = { telegram: false, email: false }
+  try {
+    const { data: reg } = await supabase
+      .from('workshop_registrations')
+      .select('name, email, telegram_chat_id, review_token, workshop_id, payment_status, payment_mode, amount_paid')
+      .eq('id', p.registrationId)
+      .maybeSingle()
+    if (!reg || (!reg.email && !reg.telegram_chat_id)) return none
+    const { data: w } = await supabase.from('workshops').select('title, host_name, brand_name, price').eq('id', reg.workshop_id).maybeSingle()
+
+    const host = w?.brand_name || w?.host_name || 'The host'
+    const title = w?.title || 'the workshop'
+    const first = String(reg.name || '').trim().split(/\s+/)[0] || 'there'
+    const amount = p.amount ?? amountPaidFor(reg, Number(w?.price) || 0)
+    const money = `₹${Math.round(amount).toLocaleString('en-IN')}`
+    const url = `${SITE()}/workshop-refund/${reg.review_token}`
+
+    let subject: string
+    let lines: string[]
+    if (p.outcome === 'refunded_online') {
+      subject = `Your refund for ${title}`
+      lines = [`Your refund of ${money} for “${title}” has been sent back to the payment method you used.`, 'Banks can take a few working days to show it.']
+    } else if (p.outcome === 'refunded_by_hand') {
+      subject = `Your refund for ${title}`
+      lines = [`${host} has marked your refund of ${money} for “${title}” as sent.`, 'Please check your UPI app or bank account. If you do not see it, contact the host directly.']
+    } else {
+      subject = `About your refund request for ${title}`
+      lines = [`${host} could not approve your refund request for “${title}”.`, ...(p.note ? [`Note from ${host}: ${p.note}`] : []), 'If you have questions, please contact the host directly.']
+    }
+
+    const [telegram, email] = await Promise.all([
+      reg.telegram_chat_id ? sendTelegramText(reg.telegram_chat_id, `Hi ${first},\n\n${lines.join('\n\n')}\n\nDetails: ${url}`) : Promise.resolve(false),
+      reg.email
+        ? sendLoggedEmail({
+            supabase,
+            creatorId: p.creatorId,
+            emailType: 'workshop_refund_update',
+            to: reg.email,
+            subject,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.6">
+                <p>Hi ${escapeHtml(first)},</p>
+                ${lines.map(l => `<p style="white-space:pre-wrap">${escapeHtml(l)}</p>`).join('')}
+                <p><a href="${url}">See your refund status</a></p>
+              </div>`,
+            metadata: { workshop_registration_id: p.registrationId, outcome: p.outcome },
+          }).then(r => !!r.sent)
+        : Promise.resolve(false),
+    ])
+    return { telegram, email }
+  } catch (err) {
+    console.error('[workshop-refund] could not notify the student:', err)
+    return none
+  }
+}
+
+/** " We also told the student on Telegram and by email." (only what really went out) */
+function toldNote(r: { telegram: boolean; email: boolean }): string {
+  const ways = [r.telegram && 'on Telegram', r.email && 'by email'].filter(Boolean).join(' and ')
+  return ways ? ` We also told the student ${ways}.` : ''
+}
 
 /** Students can ask until this many days after the workshop starts. */
 export const refundDeadline = (workshopDateTime: string) =>
@@ -75,7 +165,8 @@ export async function decideWorkshopRefundRequest(
 
   if (decision === 'denied') {
     await supabase.from('refund_requests').update({ status: 'denied', decision_note: note, decided_at: now(), decided_by: 'creator' }).eq('id', requestId).eq('status', 'pending')
-    return { ok: true, message: 'Request declined.' }
+    const told = await notifyStudentOfRefundDecision(supabase, { registrationId: request.workshop_registration_id, creatorId, outcome: 'declined', note })
+    return { ok: true, message: `Request declined.${toldNote(told)}` }
   }
 
   // Claim the request first, so a double tap can never send two refunds.
@@ -99,7 +190,8 @@ export async function decideWorkshopRefundRequest(
   if (p.manual) {
     await supabase.from('refund_requests').update({ status: 'completed', decision_note: note, completed_at: now() }).eq('id', requestId)
     if (!reg.refunded_at) await supabase.from('workshop_registrations').update({ refunded_at: now() }).eq('id', reg.id)
-    return { ok: true, message: 'Marked as refunded. Their spot is now removed from your workshop numbers.' }
+    const told = await notifyStudentOfRefundDecision(supabase, { registrationId: reg.id, creatorId, outcome: 'refunded_by_hand', note })
+    return { ok: true, message: `Marked as refunded. Their spot is now removed from your workshop numbers.${toldNote(told)}` }
   }
 
   if (reg.payment_mode !== 'gateway') {
@@ -137,10 +229,16 @@ export async function decideWorkshopRefundRequest(
   }
 
   const refundId = randomUUID()
-  await supabase.from('refunds').insert({
+  const { error: refundInsertError } = await supabase.from('refunds').insert({
     id: refundId, payment_id: payment.id, creator_id: creatorId,
     amount: requestedAmount, reason: note, revoke_access: true, provider: payment.provider, status: 'pending',
   })
+  // If the record cannot be saved, stop here. Sending money without a record would let the same payment be refunded twice.
+  if (refundInsertError) {
+    console.error('[workshop-refund] could not save the refund record:', refundInsertError.message)
+    await release()
+    return { ok: false, status: 500, error: 'We could not record this refund, so nothing was sent. Please try again.' }
+  }
 
   try {
     const { providerRefundId } = await executeGatewayRefund({
@@ -154,7 +252,8 @@ export async function decideWorkshopRefundRequest(
     const full = requestedAmount >= refundable - 0.01
     if (full) await supabase.from('workshop_registrations').update({ refunded_at: now() }).eq('id', reg.id)
     await supabase.from('refund_requests').update({ status: 'completed', decision_note: note, completed_at: now() }).eq('id', requestId)
-    return { ok: true, message: `Refund of ₹${requestedAmount.toLocaleString('en-IN')} sent to the student's original payment method.${full ? ' Their spot is now removed from your workshop numbers.' : ''}` }
+    const told = await notifyStudentOfRefundDecision(supabase, { registrationId: reg.id, creatorId, outcome: 'refunded_online', amount: requestedAmount, note })
+    return { ok: true, message: `Refund of ₹${requestedAmount.toLocaleString('en-IN')} sent to the student's original payment method.${full ? ' Their spot is now removed from your workshop numbers.' : ''}${toldNote(told)}` }
   } catch (err: any) {
     const msg = err instanceof RefundExecutionError
       ? err.message

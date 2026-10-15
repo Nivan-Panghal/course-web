@@ -133,9 +133,11 @@ export default function WorkshopStudentsView() {
                   {!workshopId && w && <p className="text-[13px] truncate" style={body}>{w.title} · {formatWorkshopDateTime(w.dateTime)}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {isConfirmed(r) ? <Chip tone="good">Confirmed{r.counted > 0 ? ` · ${inr(r.counted)}` : ''}</Chip>
-                    : isAwaiting(r) ? <Chip tone="warn">Waiting for payment check</Chip>
-                      : <Chip>Payment not finished</Chip>}
+                  {r.refunded ? <Chip>Refunded</Chip>
+                    : isConfirmed(r) ? <Chip tone="good">Confirmed{r.counted > 0 ? ` · ${inr(r.counted)}` : ''}</Chip>
+                      : isAwaiting(r) ? <Chip tone="warn">Waiting for payment check</Chip>
+                        : <Chip>Payment not finished</Chip>}
+                  {!r.refunded && r.refundStatus === 'pending' && <Chip tone="warn">Refund asked</Chip>}
                   {r.hasTelegram ? <Chip tone="info"><Send className="w-3 h-3 inline -mt-0.5" /> Telegram</Chip> : r.email ? <Chip>Email only</Chip> : <Chip tone="warn">No contact</Chip>}
                   {r.certificateSent ? <Chip tone="good">Certificate sent</Chip> : r.certificateMade ? <Chip>Certificate made</Chip> : null}
                 </div>

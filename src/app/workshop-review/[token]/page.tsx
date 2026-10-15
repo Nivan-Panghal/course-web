@@ -137,6 +137,11 @@ export default function WorkshopReviewPage({ params }: { params: Promise<{ token
         className="w-full mt-5 py-3 rounded-xl text-sm font-semibold text-white violet-gradient hover:opacity-90 disabled:opacity-50">
         {saving ? 'Saving…' : info.review ? 'Update my review' : 'Submit review'}
       </button>
+
+      <p className="text-[13px] text-center mt-4" style={{ color: 'var(--kurso-hint)' }}>
+        Not happy with the workshop?{' '}
+        <a href={`/workshop-refund/${token}`} className="underline" style={{ color: 'var(--kurso-text-secondary)' }}>Ask for a refund</a>
+      </p>
     </>,
   )
 }

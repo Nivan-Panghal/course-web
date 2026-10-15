@@ -49,11 +49,11 @@ export async function GET(req: NextRequest) {
     const priceOf = new Map(workshops.map(w => [w.id, w.price]))
 
     // Registrations, in pages (the database returns at most 1000 rows per request).
-    // "attended" only exists after the certificates SQL has been run, so fall back without it.
-    let withAttended = true
+    // "attended" and "refunded_at" only exist after the SQL files have been run, so fall back without them.
+    let withOptional = true
     const rows: any[] = []
     for (let from = 0; from < MAX_ROWS; from += PAGE) {
-      const columns = `id, workshop_id, name, phone, email, payment_mode, payment_status, amount_paid, telegram_chat_id, referred_by_code_id, created_at${withAttended ? ', attended' : ''}`
+      const columns = `id, workshop_id, name, phone, email, payment_mode, payment_status, amount_paid, telegram_chat_id, referred_by_code_id, created_at${withOptional ? ', attended, refunded_at' : ''}`
       const { data, error } = await supabase
         .from('workshop_registrations')
         .select(columns)
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
         .order('created_at', { ascending: false })
         .range(from, from + PAGE - 1)
       if (error) {
-        if (withAttended && /attended/.test(error.message)) { withAttended = false; from -= PAGE; continue }
+        if (withOptional && /attended|refunded_at/.test(error.message)) { withOptional = false; from -= PAGE; continue }
         console.error('[workshop-overview] registrations failed', error.message)
         return NextResponse.json({ error: 'Could not load registrations.' }, { status: 500 })
       }
@@ -79,10 +79,31 @@ export async function GET(req: NextRequest) {
       for (const c of certRows || []) certs.set(c.registration_id, { made: true, sent: !!(c.telegram_sent_at || c.email_sent_at) })
     }
 
+    // Refunds: online refunds that went through, and the status of each refund request.
+    // Both are optional reads, so a missing table or column just means "no refunds yet".
+    const refundedByReg = new Map<string, number>()
+    const { data: payRows } = await supabase.from('payments').select('id, workshop_registration_id').eq('creator_id', user.id).eq('product_type', 'workshop')
+    const { data: refundRows } = await supabase.from('refunds').select('payment_id, amount').eq('creator_id', user.id).eq('status', 'succeeded')
+    const regOfPayment = new Map((payRows || []).map(p => [p.id, p.workshop_registration_id]))
+    for (const rf of refundRows || []) {
+      const regId = regOfPayment.get(rf.payment_id)
+      if (regId) refundedByReg.set(regId, (refundedByReg.get(regId) || 0) + Number(rf.amount))
+    }
+    const requestStatus = new Map<string, 'pending' | 'completed' | 'denied'>()
+    const { data: reqRows } = await supabase.from('refund_requests').select('workshop_registration_id, status, requested_at').eq('creator_id', user.id).eq('type', 'workshop').order('requested_at', { ascending: true })
+    for (const q of reqRows || []) {
+      if (!q.workshop_registration_id) continue
+      requestStatus.set(q.workshop_registration_id, q.status === 'completed' ? 'completed' : q.status === 'denied' ? 'denied' : 'pending')
+    }
+
     const registrations: RegistrationRow[] = rows.map(r => {
       const confirmed = r.payment_status === 'confirmed'
       const online = Number(r.amount_paid) || 0
-      const counted = !confirmed ? 0 : online > 0 ? online : r.payment_mode === 'free' ? 0 : (priceOf.get(r.workshop_id) ?? 0)
+      const paid = !confirmed ? 0 : online > 0 ? online : r.payment_mode === 'free' ? 0 : (priceOf.get(r.workshop_id) ?? 0)
+      const refunded = !!r.refunded_at
+      // A full refund (also one marked by hand) takes the whole amount off; a part refund takes off just that part.
+      const refundedAmount = refunded ? Math.max(paid, refundedByReg.get(r.id) || 0) : (refundedByReg.get(r.id) || 0)
+      const counted = Math.max(0, paid - refundedAmount)
       const cert = certs.get(r.id)
       return {
         id: r.id,
@@ -98,6 +119,9 @@ export async function GET(req: NextRequest) {
         viaReferral: !!r.referred_by_code_id,
         certificateMade: !!cert?.made,
         certificateSent: !!cert?.sent,
+        refunded,
+        refundedAmount,
+        refundStatus: requestStatus.get(r.id) ?? null,
         createdAt: r.created_at,
       }
     })

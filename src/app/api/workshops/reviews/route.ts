@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
       .select('id, workshop_id, name, email, telegram_chat_id, review_requested_at')
       .in('workshop_id', ids)
       .eq('payment_status', 'confirmed')
+      .is('refunded_at', null)
     if (regErr) return setupError(regErr.message)
 
     const nameOf = new Map((regs || []).map(r => [r.id, r.name]))
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
         .select('id, name, email, telegram_chat_id, review_token, review_requested_at')
         .eq('workshop_id', workshop.id)
         .eq('payment_status', 'confirmed')
+        .is('refunded_at', null)
       if (regErr) return setupError(regErr.message)
       const { data: done } = await supabase.from('workshop_reviews').select('registration_id').eq('workshop_id', workshop.id)
       const reviewed = new Set((done || []).map(d => d.registration_id))
@@ -177,7 +179,7 @@ export async function POST(req: NextRequest) {
         await Promise.all(people.slice(i, i + CHUNK).map(async p => {
           const url = `${SITE()}/workshop-review/${p.review_token}`
           const [t, e] = await Promise.all([
-            p.telegram_chat_id ? sendTelegram(p.telegram_chat_id, `⭐ How was “${workshop.title}”?\n\nRate it in about 20 seconds:\n${url}`) : Promise.resolve(null),
+            p.telegram_chat_id ? sendTelegram(p.telegram_chat_id, `⭐ How was “${workshop.title}”?\n\nRate it in about 20 seconds:\n${url}\n\nNot happy? You can ask for a refund here:\n${SITE()}/workshop-refund/${p.review_token}`) : Promise.resolve(null),
             p.email
               ? sendLoggedEmail({
                   supabase,
@@ -190,6 +192,7 @@ export async function POST(req: NextRequest) {
                       <p>Hi ${escapeHtml(p.name)},</p>
                       <p>Thank you for joining <strong>${escapeHtml(workshop.title)}</strong>. Could you rate it? It takes about 20 seconds and helps the host a lot.</p>
                       <p><a href="${url}" style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:bold">Rate the workshop</a></p>
+                      <p style="color:#6b7280;font-size:13px">Not happy with the workshop? <a href="${SITE()}/workshop-refund/${p.review_token}">Ask for a refund</a>.</p>
                     </div>`,
                   metadata: { workshop_id: workshop.id, workshop_registration_id: p.id },
                 }).then(r => !!r.sent)

@@ -79,6 +79,7 @@ export async function GET(req: NextRequest) {
       .select('id, name, phone, email, telegram_chat_id, attended')
       .eq('workshop_id', workshop.id)
       .eq('payment_status', 'confirmed')
+      .is('refunded_at', null)
       .order('created_at', { ascending: true })
     if (regErr) {
       console.error('[workshop-certificates] registrations failed', regErr.message)
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest) {
       .select('id, name, email, telegram_chat_id')
       .eq('workshop_id', workshop.id)
       .eq('payment_status', 'confirmed')
+      .is('refunded_at', null)
       .in('id', ids)
     if (peopleErr) {
       console.error('[workshop-certificates] lookup failed', peopleErr.message)

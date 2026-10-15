@@ -115,10 +115,15 @@ export async function decideCourseRefundRequest({ requestId, creatorId, decision
   if (!gateway) return { ok: false, status: 409, error: `Your ${payment.provider} connection isn't active — reconnect it in Settings before issuing refunds.` }
 
   const refundId = randomUUID()
-  await supabase.from('refunds').insert({
+  const { error: refundInsertError } = await supabase.from('refunds').insert({
     id: refundId, payment_id: payment.id, creator_id: creatorId, enrollment_id: request.enrollment_id,
     amount: requestedAmount, reason: note || null, revoke_access: true, provider: payment.provider, status: 'pending',
   })
+  // If the record cannot be saved, stop here. Sending money without a record would let the same payment be refunded twice.
+  if (refundInsertError) {
+    console.error('[refund] could not save the refund record:', refundInsertError.message)
+    return { ok: false, status: 500, error: 'We could not record this refund, so nothing was sent. Please try again.' }
+  }
 
   try {
     const { providerRefundId } = await executeGatewayRefund({
@@ -275,10 +280,17 @@ export async function decideEbookRefundRequest({ requestId, creatorId, decision,
   if (!gateway) return { ok: false, status: 409, error: `Your ${payment.provider} connection isn't active — reconnect it in Settings before issuing refunds.` }
 
   const refundId = randomUUID()
-  await supabase.from('refunds').insert({
-    id: refundId, payment_id: payment.id, creator_id: creatorId, purchase_id: request.purchase_id,
+  // The refunds table has no purchase_id column (the old insert asked for one, so it always failed).
+  // The refund is linked through payment_id instead.
+  const { error: refundInsertError } = await supabase.from('refunds').insert({
+    id: refundId, payment_id: payment.id, creator_id: creatorId,
     amount: requestedAmount, reason: note || null, revoke_access: true, provider: payment.provider, status: 'pending',
   })
+  // If the record cannot be saved, stop here. Sending money without a record would let the same payment be refunded twice.
+  if (refundInsertError) {
+    console.error('[refund] could not save the refund record:', refundInsertError.message)
+    return { ok: false, status: 500, error: 'We could not record this refund, so nothing was sent. Please try again.' }
+  }
 
   try {
     const { providerRefundId } = await executeGatewayRefund({

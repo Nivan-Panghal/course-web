@@ -23,6 +23,7 @@ export default function WorkshopRevenueView() {
   const { workshops, registrations } = data
   const confirmed = registrations.filter(isConfirmed)
   const total = confirmed.reduce((s, r) => s + r.counted, 0)
+  const refundedTotal = registrations.reduce((s, r) => s + r.refundedAmount, 0)
   const months = monthlyRevenue(registrations, 6)
   const thisMonth = months[months.length - 1]?.value ?? 0
   const lastMonth = months[months.length - 2]?.value ?? 0
@@ -45,7 +46,8 @@ export default function WorkshopRevenueView() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Total collected" value={inr(total)} icon={IndianRupee} color="#4ade80" />
+        <StatCard label="Total collected" value={inr(total)} icon={IndianRupee} color="#4ade80"
+          note={refundedTotal > 0 ? `After ${inr(refundedTotal)} refunded` : undefined} />
         <StatCard label="This month" value={inr(thisMonth)} icon={change !== null && change < 0 ? TrendingDown : TrendingUp} color="var(--kurso-primary-light)"
           note={change === null ? 'No sales last month to compare' : `${change >= 0 ? '+' : ''}${change}% vs last month`} />
         <StatCard label="Waiting for your confirmation" value={inr(awaitingValue)} icon={Clock3} color="#fbbf24"
