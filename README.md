@@ -108,21 +108,3 @@ and reachable at the URLs this project's env vars point to
 workshop notifications to work. They're independent Node/Express services —
 see each repo's own README.
 
-## A few things worth knowing before you touch the code
-
-- **Database changes are manual.** There are no migration files in this
-  repo. Every schema change so far has been a hand-run SQL statement in the
-  Supabase SQL editor. Get a current schema export before assuming anything
-  about the database shape from the code alone.
-- **Two independent student-login systems exist at once**: a bot-issued
-  cookie session, and a normal Supabase Auth (Google login) session. Most
-  protected routes have to check both, independently — see
-  `ARCHITECTURE.md`.
-- **Phone number formatting is inconsistent on purpose, and it matters.**
-  Indian numbers are stored as a bare 10 digits, no country code. Every
-  other country's numbers keep their full country code. Meta's webhook
-  sends numbers as `91XXXXXXXXXX`, which has to be stripped at the boundary.
-  Get this wrong anywhere and WhatsApp delivery silently breaks for a subset
-  of users. `src/lib/phone.ts` and `Whatsapp-bot/phone.js` are the only two
-  places that should ever normalize a phone number — never re-implement
-  this logic elsewhere.
