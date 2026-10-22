@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCreatorCheckoutGateway, createCheckoutOrder, CheckoutOrderError } from '@/lib/gateway-checkout'
 import { friendlyErrorResponse } from '@/lib/payment-errors'
 import { normalizePhone } from '@/lib/phone'
-import { countHeldSpots, getWorkshopRegistrationState, registrationClosedMessage } from '@/lib/workshops'
+import { GATEWAY_HOLD_MINUTES, countHeldSpots, getWorkshopRegistrationState, registrationClosedMessage } from '@/lib/workshops'
 import { resolveReferralCodeId } from '@/lib/referrals'
 import { scheduleWorkshopMetaEvent, getMetaRequestContext, leadEventId } from '@/lib/workshop-meta-events'
 
@@ -187,6 +187,33 @@ export async function POST(req: NextRequest) {
       payment_provider: gateway.provider,
     })
     if (txnError) throw txnError
+
+    // A limited coupon is held for the person checking out. If someone who started
+    // earlier is still paying for the last use, this checkout does not get the coupon.
+    if (couponId) {
+      const { data: claimed, error: claimError } = await supabase.rpc('claim_workshop_coupon_use', {
+        input_coupon_id: couponId,
+        input_transaction_id: transactionId,
+        hold_minutes: GATEWAY_HOLD_MINUTES,
+      })
+      if (claimError || claimed !== true) {
+        await supabase
+          .from('transactions')
+          .update({ status: 'failed', error_message: claimError ? 'Coupon check failed' : 'Coupon limit reached' })
+          .eq('id', transactionId)
+        // Release the spot hold: no checkout is actually open.
+        await supabase.from('workshop_registrations').update({ payment_attempted_at: null }).eq('id', registrationId)
+        if (claimError) console.error('[workshop-create-order] coupon claim failed', claimError.message)
+        return NextResponse.json(
+          {
+            error: claimError
+              ? 'We could not apply the coupon right now. Remove it to pay the full price, or try again in a moment.'
+              : 'This coupon was just used by someone else, so it is no longer available. Remove it to pay the full price.',
+          },
+          { status: 409 }
+        )
+      }
+    }
 
     try {
       const order = await createCheckoutOrder({

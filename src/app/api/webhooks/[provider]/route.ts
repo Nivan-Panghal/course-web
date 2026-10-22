@@ -7,6 +7,7 @@ import { escapeHtml, sendLoggedEmail } from '@/lib/email'
 import { generateInvoicePdfForPayment } from '@/lib/invoice'
 import { computeRevenueShareSplit } from '@/lib/revenueShare'
 import { notifyWorkshopConfirmed } from '@/lib/workshop-notify'
+import { sendStudentWelcomeEmail } from '@/lib/student-welcome-email'
 import { scheduleWorkshopMetaEvent } from '@/lib/workshop-meta-events'
 
 const supabaseAdmin = createClient(
@@ -452,7 +453,10 @@ async function handleFlowA(transaction: any, body: NormalizedEvent, signature: s
     studentPhone: cleanedPhone,
   })
 
-  return NextResponse.json({ received: true, message: 'Enrollment activated' })
+// Welcome email with the access link. Email is always on and free. Best effort, never blocks the payment. 
+await sendStudentWelcomeEmail(supabaseAdmin, { courseId: transaction.course_id, creatorId: transaction.creator_id, studentId: student.id, studentEmail: email, studentName: body.customer_name || transaction.student_name, paymentId: paymentRow.id, })
+
+return NextResponse.json({ received: true, message: 'Enrollment activated' })
 }
 
 // ── Flow A: ebook purchase ───────────────────────────────────────
@@ -721,14 +725,14 @@ if (justConfirmed) { try { await notifyWorkshopConfirmed(registrationId)
         supabase: supabaseAdmin,
         emailType: 'workshop_registration_confirmation',
         to: email,
-        subject: `You're registered: ${workshop?.title || 'Workshop'}`,
+        subject: `Your invoice for ${workshop?.title || 'the workshop'}`,
         creatorId: transaction.creator_id,
         html: `
           <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111">
-            <h2 style="margin:0 0 12px">You're in!</h2>
+            <h2 style="margin:0 0 12px">Payment received</h2>
             <p style="margin:0 0 16px">Your spot for <strong>${escapeHtml(
           workshop?.title || 'the workshop'
-        )}</strong> is confirmed — invoice ${invoiceRow.invoice_number} is attached. Join details will follow on WhatsApp.</p>
+        )}</strong> is confirmed — invoice ${invoiceRow.invoice_number} is attached. Your joining details are in a separate email.</p>
           </div>
         `,
         attachments: [{ filename, content: base64Pdf }],

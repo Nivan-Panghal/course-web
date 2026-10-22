@@ -11,13 +11,15 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { escapeHtml, sendLoggedEmail } from '@/lib/email'
+import { getWorkshopChannels } from '@/lib/workshop-channels'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function sendViaBot(phone: string, fields: { workshopTitle: string; dateTimeLabel: string; zoomLink: string }) {
+async function sendViaBot(phone: string, fields: { workshopTitle: string; dateTimeLabel: string; zoomLink: string; creatorId?: string | null; workshopId?: string }) {
   const baseUrl = process.env.WHATSAPP_BOT_URL
   const secret = process.env.INTERNAL_BOT_SECRET
   if (!baseUrl || !secret) {
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     const { data: dueWorkshops, error: workshopsError } = await supabase
       .from('workshops')
-      .select('id, title, date_time, zoom_link')
+      .select('id, creator_id, title, date_time, zoom_link')
       .eq('status', 'published')
       .is('reminder_24h_sent_at', null)
       .gte('date_time', windowStart)
@@ -64,9 +66,10 @@ export async function GET(req: NextRequest) {
     for (const workshop of dueWorkshops) {
       const { data: regs, error: regsError } = await supabase
         .from('workshop_registrations')
-        .select('phone')
+        .select('phone, email, name')
         .eq('workshop_id', workshop.id)
         .eq('payment_status', 'confirmed')
+        .is('refunded_at', null)
 
       if (regsError) {
         console.error('[workshop-reminders] registration lookup failed for', workshop.id, regsError)
@@ -77,12 +80,38 @@ export async function GET(req: NextRequest) {
         weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
       })
 
+      // The creator chooses WhatsApp per workshop. Email is always on.
+      const channels = await getWorkshopChannels(supabase, workshop.id)
+      const joinLink = workshop.zoom_link && /^https?:\/\//i.test(workshop.zoom_link) ? workshop.zoom_link : null
+
       for (const r of regs || []) {
-        await sendViaBot(r.phone, {
-          workshopTitle: workshop.title,
-          dateTimeLabel,
-          zoomLink: workshop.zoom_link || 'Link will follow shortly',
-        })
+        if (channels.whatsapp && r.phone) {
+          await sendViaBot(r.phone, {
+            workshopTitle: workshop.title,
+            dateTimeLabel,
+            zoomLink: workshop.zoom_link || 'Link will follow shortly',
+            creatorId: workshop.creator_id,
+            workshopId: workshop.id,
+          })
+        }
+        if (r.email) {
+          await sendLoggedEmail({
+            supabase,
+            emailType: 'workshop_reminder_24h',
+            to: r.email,
+            subject: `Tomorrow: ${workshop.title}`,
+            creatorId: workshop.creator_id,
+            html: `
+              <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#111;max-width:520px">
+                <h2 style="margin:0 0 12px">Your workshop is coming up</h2>
+                <p style="margin:0 0 12px"><strong>${escapeHtml(workshop.title)}</strong></p>
+                <p style="margin:0 0 12px"><strong>When:</strong> ${escapeHtml(dateTimeLabel)} (IST)</p>
+                ${joinLink
+                  ? `<p style="margin:0"><a href="${escapeHtml(joinLink)}" style="display:inline-block;background:#f79514;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none">Join the session</a></p>`
+                  : '<p style="margin:0">The joining link will be sent to you before the session starts.</p>'}
+              </div>`,
+          })
+        }
         sentCount++
       }
 

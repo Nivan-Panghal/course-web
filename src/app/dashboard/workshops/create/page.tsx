@@ -21,6 +21,7 @@ import { ArrowLeft, Check, Copy, ExternalLink, ChevronDown, AlertTriangle } from
 import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl } from '@/components/WorkshopFormFields'
 import { StringListEditor } from '@/components/WorkshopListEditors'
 import AiFieldAssist from '@/components/AiFieldAssist'
+import ChannelSwitches from '@/components/ChannelSwitches'
 import {
   WORKSHOP_DURATION_OPTIONS,
   WORKSHOP_LIMITS,
@@ -61,6 +62,9 @@ export default function CreateWorkshopPage() {
   // Takeaways, joining link, more options
   const [takeaways, setTakeaways] = useState(['', '', ''])
   const [zoomLink, setZoomLink] = useState('')
+  // How students hear from you. Email is always on, so only these two are choices.
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(true)
+  const [notifyTelegram, setNotifyTelegram] = useState(true)
   const [showMore, setShowMore] = useState(false)
   const [capacity, setCapacity] = useState('')
   const [originalPrice, setOriginalPrice] = useState('')
@@ -134,7 +138,9 @@ export default function CreateWorkshopPage() {
       const slug = await pickUniqueWorkshopSlug(supabase, user.id, result.data.title)
       const { data, error: insertError } = await supabase
         .from('workshops')
-        .insert({ creator_id: user.id, slug, status: 'published', ...result.data })
+    // The channel columns are only written when a switch was turned off (the default is on),
+    // so creating a workshop never depends on them being set up.
+    .insert({ creator_id: user.id, slug, status: 'published', ...result.data, ...(notifyWhatsapp ? {} : { notify_whatsapp: false }), ...(notifyTelegram ? {} : { notify_telegram: false }) })
         .select('slug')
         .single()
 
@@ -340,9 +346,14 @@ export default function CreateWorkshopPage() {
           <FormCard title="Joining link" tag="recommended"
             description="Add it now or later, but attendees can't join without it.">
             <FormField label="Zoom / Google Meet link" htmlFor="ws-zoom"
-              hint="Only confirmed registrants receive it, by WhatsApp or Telegram. It is never shown on your public page.">
+              hint="Only confirmed registrants receive it, by email and on the channels you switch on below. It is never shown on your public page.">
               <TextInput id="ws-zoom" type="url" value={zoomLink} onChange={setZoomLink} placeholder="https://zoom.us/j/..." />
             </FormField>
+          </FormCard>
+
+          <FormCard title="How students hear from you" description="Choose where confirmations and reminders go. You can change this later.">
+            <ChannelSwitches kind="workshop" whatsapp={notifyWhatsapp} telegram={notifyTelegram}
+              onChange={next => { setNotifyWhatsapp(next.whatsapp); setNotifyTelegram(next.telegram) }} />
           </FormCard>
 
           <section className="rounded-2xl glass" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>

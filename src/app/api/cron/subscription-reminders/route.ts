@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendLoggedEmail, escapeHtml } from '@/lib/email'
+import { randomUUID } from 'crypto'
+import { computeCourseWorkshopMonth, type SaleRow, type RefundedSale } from '@/lib/invoiceCalc'
+import { loadWhatsappSettings, previewWhatsappUsage, priceWhatsappUsage, type InvoiceLineItem } from '@/lib/whatsappBilling'
 import { getSubscriptionPlan } from '@/app/api/razorpay/subscription-plans'
 import { previousMonthRange, REVENUE_SHARE_INVOICE_GRACE_DAYS, EBOOK_REVENUE_SHARE_RATE_PERCENT, EBOOK_MONTHLY_REVENUE_FLOOR } from '@/lib/revenueShare'
 
@@ -8,6 +11,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// Reads every row of a query, a page at a time (the database returns at most 1000 rows per request).
+async function fetchAllRows<T>(page: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999)
+    if (error) throw error
+    rows.push(...((data || []) as T[]))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
 
 // A pending extension request holds off auto-expiry, but only for this many
 // days from when it was submitted — an unreviewed request can't stall a
@@ -206,51 +221,125 @@ async function runRevenueShareSweep(now: Date, results: {
 }) {
   const { start, end } = previousMonthRange(now)
 
-  // ── 1. Course invoices — only for active PAYE agreements ──────────
-  const { data: agreements, error: agErr } = await supabase
-    .from('revenue_share_agreements')
-    .select('id, creator_id, base_rate_percent')
-    .eq('status', 'active')
-  if (agErr) { results.errors.push(`revenue-share agreements query: ${agErr.message}`) }
+  // ── 1. Course + workshop invoices — everyone is Pay As You Earn ────
+  // One invoice per creator per month. It has up to three kinds of lines:
+  //   - commission on what students paid (after coupons), reduced for refunds
+  //   - WhatsApp message charges (Meta's rate, passed through; see lib/whatsappBilling.ts)
+  // A month with no sales still gets an invoice if WhatsApp charges are due.
+  try {
+    const cutoff = new Date(`${end}T23:59:59.999Z`)
+    const startIso = `${start}T00:00:00.000Z`
+    const settings = await loadWhatsappSettings(supabase)
 
-  for (const agreement of agreements || []) {
-    try {
-      const { data: existingInvoice } = await supabase
-        .from('revenue_share_invoices')
-        .select('id')
-        .eq('creator_id', agreement.creator_id)
-        .eq('period_start', start)
-        .eq('product_type', 'course')
-        .maybeSingle()
-      if (existingInvoice) continue
-
-      const { data: periodPayments, error: payErr } = await supabase
-        .from('payments')
-        .select('gross_amount, platform_fee')
-        .eq('creator_id', agreement.creator_id)
-        .eq('status', 'paid')
-        .in('product_type', ['course', 'workshop'])
-        .gte('paid_at', `${start}T00:00:00.000Z`)
-        .lte('paid_at', `${end}T23:59:59.999Z`)
-      if (payErr) throw payErr
-
-      const grossRevenue = (periodPayments || []).reduce((sum, p) => sum + (p.gross_amount || 0), 0)
-      const totalAmountDue = (periodPayments || []).reduce((sum, p) => sum + (p.platform_fee || 0), 0)
-
-      await supabase.from('revenue_share_invoices').insert({
-        creator_id: agreement.creator_id,
-        agreement_id: agreement.id,
-        product_type: 'course',
-        period_start: start,
-        period_end: end,
-        gross_revenue: grossRevenue,
-        total_amount_due: totalAmountDue,
-        status: totalAmountDue > 0 ? 'pending' : 'not_due',
-      })
-      results.revenueShareInvoicesGenerated++
-    } catch (e: any) {
-      results.errors.push(`course revenue-share invoice for creator ${agreement.creator_id}: ${e.message}`)
+    type Group = { sales: SaleRow[]; refunds: RefundedSale[] }
+    const groups = new Map<string, Group>()
+    const groupOf = (creatorId: string) => {
+      let g = groups.get(creatorId)
+      if (!g) { g = { sales: [], refunds: [] }; groups.set(creatorId, g) }
+      return g
     }
+
+    // Sales paid this month
+    const salesRows = await fetchAllRows<{ creator_id: string; net_amount: number; platform_fee: number }>((from, to) =>
+      supabase.from('payments').select('creator_id, net_amount, platform_fee')
+        .eq('status', 'paid').in('product_type', ['course', 'workshop'])
+        .gte('paid_at', startIso).lte('paid_at', cutoff.toISOString()).order('id').range(from, to))
+    for (const p of salesRows) groupOf(p.creator_id).sales.push({ net_amount: p.net_amount, platform_fee: p.platform_fee })
+
+    // Refunds sent this month (for sales of any month)
+    const refundRows = await fetchAllRows<{ payment_id: string; amount: number }>((from, to) =>
+      supabase.from('refunds').select('payment_id, amount')
+        .eq('status', 'succeeded').gte('created_at', startIso).lte('created_at', cutoff.toISOString()).order('id').range(from, to))
+    const refundedPaymentIds = [...new Set(refundRows.map(r => r.payment_id))]
+    const paymentById = new Map<string, { creator_id: string; net_amount: number; platform_fee: number }>()
+    for (let i = 0; i < refundedPaymentIds.length; i += 200) {
+      const { data } = await supabase.from('payments').select('id, creator_id, net_amount, platform_fee')
+        .in('id', refundedPaymentIds.slice(i, i + 200)).in('product_type', ['course', 'workshop'])
+      for (const p of data || []) paymentById.set(p.id, p)
+    }
+    for (const r of refundRows) {
+      const sale = paymentById.get(r.payment_id)
+      if (sale) groupOf(sale.creator_id).refunds.push({ refund_amount: r.amount, sale_net_amount: sale.net_amount, sale_platform_fee: sale.platform_fee })
+    }
+
+    // Creators with WhatsApp messages not yet on an invoice
+    const whatsappCreators = await fetchAllRows<{ creator_id: string }>((from, to) =>
+      supabase.rpc('whatsapp_creators_with_unbilled', { input_cutoff: cutoff.toISOString() }).range(from, to))
+    for (const w of whatsappCreators) groupOf(w.creator_id)
+
+    const { data: agreementRows } = await supabase.from('revenue_share_agreements').select('id, creator_id').eq('status', 'active')
+    const agreementOf = new Map((agreementRows || []).map(a => [a.creator_id, a.id]))
+
+    for (const [creatorId, group] of groups) {
+      try {
+        const { data: existingInvoice } = await supabase
+          .from('revenue_share_invoices').select('id')
+          .eq('creator_id', creatorId).eq('period_start', start).eq('product_type', 'course').maybeSingle()
+        if (existingInvoice) continue
+
+        const calc = computeCourseWorkshopMonth(group.sales, group.refunds)
+
+        // Small WhatsApp totals wait for the next month, unless commission is due anyway.
+        const preview = priceWhatsappUsage(await previewWhatsappUsage(supabase, creatorId, cutoff), settings)
+        const includeWhatsapp = preview.total > 0 && (calc.commission > 0 || preview.total >= settings.minInvoiceInr)
+        if (calc.salesTotal === 0 && calc.refundedTotal === 0 && !includeWhatsapp) continue
+
+        const invoiceId = randomUUID()
+        let whatsappLines: ReturnType<typeof priceWhatsappUsage>['lines'] = []
+        let whatsappTotal = 0
+        if (includeWhatsapp) {
+          // Claim first, then price what was claimed: late messages can never be missed or counted twice.
+          const { data: claimed, error: claimErr } = await supabase.rpc('claim_whatsapp_usage', {
+            input_creator_id: creatorId, input_cutoff: cutoff.toISOString(), input_invoice_id: invoiceId,
+          })
+          if (claimErr) throw claimErr
+          const priced = priceWhatsappUsage(
+            ((claimed || []) as { category: string; messages: number | string }[]).map(c => ({ category: c.category, messages: Number(c.messages) })),
+            settings,
+          )
+          whatsappLines = priced.lines
+          whatsappTotal = priced.total
+        }
+
+        const lineItems: InvoiceLineItem[] = []
+        if (calc.salesTotal > 0 || calc.refundedTotal > 0) {
+          lineItems.push({ type: 'sales', label: 'Paid by your students (after coupons and refunds)', amount: calc.collected,
+            detail: calc.refundedTotal > 0 ? `₹${calc.salesTotal} paid, ₹${calc.refundedTotal} refunded` : undefined })
+        }
+        if (calc.commission > 0 || calc.commissionOnSales > 0) {
+          lineItems.push({ type: 'commission', label: 'Kurso commission on courses and workshops', amount: calc.commission })
+        }
+        if (calc.commissionCredit > 0) {
+          lineItems.push({ type: 'refund_credit', label: 'Commission returned for refunded sales', amount: -calc.commissionCredit })
+        }
+        lineItems.push(...whatsappLines)
+
+        const totalAmountDue = Math.round(calc.commission + whatsappTotal)
+        const { error: insertErr } = await supabase.from('revenue_share_invoices').insert({
+          id: invoiceId,
+          creator_id: creatorId,
+          agreement_id: agreementOf.get(creatorId) ?? null,
+          product_type: 'course',
+          period_start: start,
+          period_end: end,
+          gross_revenue: calc.collected,
+          commission_amount: calc.commission,
+          whatsapp_amount: whatsappTotal,
+          line_items: lineItems,
+          total_amount_due: totalAmountDue,
+          status: totalAmountDue > 0 ? 'pending' : 'not_due',
+        })
+        if (insertErr) {
+          if (includeWhatsapp) await supabase.rpc('release_whatsapp_usage', { input_invoice_id: invoiceId })
+          throw insertErr
+        }
+        results.revenueShareInvoicesGenerated++
+      } catch (e: any) {
+        results.errors.push(`course revenue-share invoice for creator ${creatorId}: ${e.message}`)
+      }
+    }
+  } catch (e: any) {
+    results.errors.push(`course revenue-share invoices: ${e.message}`)
   }
 
   // ── 2. Ebook invoices — every creator with ebook sales, unconditionally ──
@@ -329,7 +418,7 @@ async function runRevenueShareSweep(now: Date, results: {
             supabase,
             emailType: isEbook ? 'ebook_revenue_share_invoice_reminder' : 'revenue_share_invoice_reminder',
             to: creator.email,
-            subject: `Your Kurso ${isEbook ? 'ebook ' : ''}commission of ₹${invoice.total_amount_due} is due`,
+            subject: isEbook ? `Your Kurso ebook commission of ₹${invoice.total_amount_due} is due` : `Your Kurso invoice of ₹${invoice.total_amount_due} is due`,
             html: revenueShareReminderEmailHtml({
               name: creator.name, amount: invoice.total_amount_due,
               daysLeft: Math.max(0, Math.ceil(REVENUE_SHARE_INVOICE_GRACE_DAYS - ageDays)), isEbook,
@@ -374,7 +463,7 @@ async function runRevenueShareSweep(now: Date, results: {
             supabase,
             emailType: isEbook ? 'ebook_revenue_share_invoice_overdue' : 'revenue_share_invoice_overdue',
             to: creator.email,
-            subject: isEbook ? 'New ebook sales paused — unpaid commission' : 'Your Kurso courses have been paused — unpaid commission',
+            subject: isEbook ? 'New ebook sales paused — unpaid commission' : 'Your Kurso courses have been paused — unpaid invoice',
             html: revenueShareOverdueEmailHtml({ name: creator.name, amount: invoice.total_amount_due, isEbook }),
             creatorId: invoice.creator_id,
           })
@@ -394,8 +483,8 @@ function revenueShareReminderEmailHtml({ name, amount, daysLeft, isEbook }: { na
   return `
     <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #18181b;">
       <p>Hi ${safeName},</p>
-      <p>Last month you collected enough for a Kurso ${isEbook ? 'ebook ' : ''}commission of <strong>₹${amount}</strong>. It's due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}, ${consequence}.</p>
-      <p>Pay now, or if it was a slow month, request a waiver — both from your dashboard:</p>
+      <p>${isEbook ? `Last month you collected enough for a Kurso ebook commission of <strong>₹${amount}</strong>.` : `Your Kurso invoice for last month is <strong>₹${amount}</strong>. It covers commission on your course and workshop sales and any WhatsApp message charges.`} It's due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}, ${consequence}.</p>
+      <p>Pay now, or if it was a slow month, request a waiver of the commission part — both from your dashboard:</p>
       <p><a href="${process.env.NEXT_PUBLIC_SITE_URL}/upgrade" style="display:inline-block;padding:10px 20px;background:#f79514;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Go to billing</a></p>
       <p style="font-size: 13px; color: #71717a;">— Team Kurso</p>
     </div>
@@ -410,7 +499,7 @@ function revenueShareOverdueEmailHtml({ name, amount, isEbook }: { name: string;
   return `
     <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #18181b;">
       <p>Hi ${safeName},</p>
-      <p>Your unpaid Kurso ${isEbook ? 'ebook ' : ''}commission of <strong>₹${amount}</strong> has gone past the grace period, so ${consequence}</p>
+      <p>Your unpaid Kurso ${isEbook ? 'ebook commission' : 'invoice'} of <strong>₹${amount}</strong> has gone past the grace period, so ${consequence}</p>
       <p>Pay the invoice to go live again immediately:</p>
       <p><a href="${process.env.NEXT_PUBLIC_SITE_URL}/upgrade" style="display:inline-block;padding:10px 20px;background:#f79514;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Go to billing</a></p>
       <p style="font-size: 13px; color: #71717a;">— Team Kurso</p>

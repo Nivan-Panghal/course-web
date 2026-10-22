@@ -66,14 +66,14 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Upgrade button */}
+     {/* Billing button */}
       <div className="px-3 pb-2">
         <Link href="/upgrade"
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all w-full"
           style={{background:'rgba(var(--kurso-primary-rgb), 0.1)', color:'var(--kurso-primary-light)', border:'1px solid rgba(var(--kurso-primary-rgb), 0.2)'}}>
-          <Zap className="w-4 h-4" />
-          Upgrade Plan
-        </Link>
+      <Zap className="w-4 h-4" />
+      Billing
+    </Link>
       </div>
 
       {/* Logout */}

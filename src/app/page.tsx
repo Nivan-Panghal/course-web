@@ -71,7 +71,7 @@ const features = [
 
 const steps = [
   { num: '01', title: 'Upload your course', desc: 'Drag in your videos, notes, and assignments. No technical setup required.' },
-    { num: '02', title: 'Set your price', desc: 'Pick a flat monthly plan, or pay 5% only in months you actually earn — connect your bank account or UPI ID for direct payouts either way.' },
+    { num: '02', title: 'Set your price', desc: 'Set what students pay. Kurso takes a small share only of what you earn, with nothing to pay upfront. Connect your bank account or UPI ID for direct payouts.' },
   { num: '03', title: 'Share your link', desc: 'Students enroll and pay on your course page. They are auto-enrolled the moment payment succeeds.' },
   { num: '04', title: 'Bot delivers lessons', desc: 'Each lesson lands in WhatsApp or Telegram. Mark it done to unlock the quiz, notes, and assignment — then the next lesson.' },
   { num: '05', title: 'Go live anytime', desc: 'Drop in a Zoom or Google Meet link for a live class — we share it with every enrolled student automatically.' },
@@ -141,12 +141,12 @@ const faqs = [
     a: "You connect your own Razorpay, Stripe, or Cashfree account using your API keys. Payments go directly to your account — we simply verify each transaction on our end and unlock the course automatically once it clears.",
   },
   {
-        q: 'Can I try Kurso before paying for a plan?',
-    a: "Yes. You can build your entire course, upload lessons, and test the full experience across the dashboard and bots for free. You only need a plan once you're ready to go live for real students.",
+    q: 'Do I need to pay anything to get started?',
+    a: "No. There is no monthly plan and no setup fee. You can build your course, upload lessons, and test the full experience for free. Kurso only takes a share of what students pay you once you start earning.",
   },
   {
     q: 'How does "Pay As You Earn" actually work?',
-    a: "You get full access to WhatsApp and Telegram delivery with zero upfront cost. Each month, we total up what you actually collected from students and invoice you 5% of it (6.5% on the portion above 300 active paid students) — paid as a single one-time payment, not an auto-debit. If you made ₹0 that month, there's nothing to pay. If a month was slower than expected even with sales, you can request a waiver from your dashboard instead of paying.",
+    a: "Everyone is on Pay As You Earn. Each month we add up what your students actually paid you for courses and workshops and invoice 5% of it (6.5% beyond 300 paid students, counted separately for courses and for workshops). Ebooks are 4% in months you collect ₹500 or more. You pay by a single one-time payment, not an auto-debit, and if you made nothing there is no commission. If a month was slow, you can ask to waive the commission from your dashboard. WhatsApp message charges are separate and explained below.",
   },
   {
     q: 'I already have a landing page for my course — do I need to switch?',
@@ -161,69 +161,18 @@ const faqs = [
     a: "Every video and PDF is watermarked, and lesson links expire after a short window. Even if a link is shared once, it won't stay usable — so it can't quietly turn into a pirated copy.",
   },
   {
-    q: 'What if I use less than my plan allows in a month?',
-    a: "We roll it forward. If you use fewer resources than your plan covers, we automatically extend your plan into the next month at no extra cost — you don't lose what you didn't use.",
+    q: 'How are WhatsApp messages charged?',
+    a: "Meta charges a small fee for each WhatsApp message it delivers. We pass that exact cost on to you on your monthly invoice, at Meta's rate and with no markup, separate from commission. Telegram and email are free. Your billing page shows every message type, its rate, and what you have used so far.",
   },
   {
     q: 'What if my student does not have Telegram installed?',
-    a: "If your plan delivers on Telegram only, they'll need to install it to receive lessons there — same as any Telegram-based delivery. This is exactly why we recommend WhatsApp as your primary channel: almost every student already has it, so there's no install step at all. You can also pick the WhatsApp + Telegram plan to cover both.",
+    a: "They would need to install it to receive lessons there, same as any Telegram-based delivery. That is why most creators also turn on WhatsApp, since almost every student already has it. Email always works too, so students never miss a confirmation or update.",
   },
 ]
 
 const PAYE_BASE_RATE = 5
 const PAYE_OVERFLOW_RATE = 6.5
 const PAYE_STUDENT_THRESHOLD = 300
-
-const plans = [
-  {
-    name: 'Web + Telegram',
-    price: '₹2,500',
-    period: '/month',
-    desc: 'Deliver your course through your dashboard and the Telegram bot.',
-    features: [
-      'Web dashboard for creators',
-      'Telegram bot lesson delivery',
-      'Quizzes, notes & assignments',
-      'Auto certificates on completion',
-      'Live class link sharing',
-      'Connect Razorpay, Stripe, or Cashfree via API key',
-    ],
-    cta: 'Get Started',
-    highlighted: false,
-  },
-  {
-    name: 'Web + WhatsApp',
-    price: '₹3,500',
-    period: '/month',
-    desc: 'Deliver your course through your dashboard and the WhatsApp bot.',
-    features: [
-      'Web dashboard for creators',
-      'WhatsApp bot lesson delivery',
-      'Quizzes, notes & assignments',
-      'Auto certificates on completion',
-      'Live class link sharing',
-      'Connect Razorpay, Stripe, or Cashfree via API key',
-    ],
-    cta: 'Get Started',
-    highlighted: true,
-  },
-  {
-    name: 'Web + WhatsApp + Telegram',
-    price: '₹4,000',
-    period: '/month',
-    desc: 'Full reach — deliver on both bots plus your dashboard.',
-    features: [
-      'Web dashboard for creators',
-      'WhatsApp + Telegram bot delivery',
-      'Quizzes, notes & assignments',
-      'Auto certificates on completion',
-      'Live class link sharing',
-      'Connect Razorpay, Stripe, or Cashfree via API key',
-    ],
-    cta: 'Get Started',
-    highlighted: false,
-  },
-]
 
 const stats = [
   { num: 'Free', label: 'To build & test' },
@@ -271,54 +220,6 @@ function StepCard({ num, title, desc }: typeof steps[0]) {
         <h3 className="font-semibold text-white mb-2">{title}</h3>
         <p className="text-text-2 text-sm leading-relaxed">{desc}</p>
       </div>
-    </div>
-  )
-}
-
-function PlanCard({ plan }: { plan: typeof plans[0] }) {
-  return (
-    <div className={`rounded-2xl p-8 border transition-all duration-300 flex flex-col ${plan.highlighted
-      ? 'border-transparent glow-strong relative'
-      : 'glass border-border hover:glow'
-      }`}
-      style={plan.highlighted
-        ? { background: 'linear-gradient(135deg, var(--kurso-primary), #c2410c)' }
-        : { }}
-      onMouseEnter={e => { if (!plan.highlighted) e.currentTarget.style.borderColor = 'rgba(247,149,20,0.3)' }}
-      onMouseLeave={e => { if (!plan.highlighted) e.currentTarget.style.borderColor = '' }}
-    >
-      {plan.highlighted && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-4 py-1 rounded-full"
-          style={{ background: '#fff', color: 'var(--kurso-primary)' }}>
-          MOST POPULAR
-        </div>
-      )}
-      <div className="mb-6">
-        <div className="text-sm font-medium text-text-2 mb-1">{plan.name}</div>
-        <div className="flex items-baseline gap-1 mb-2">
-          <span className="text-4xl font-bold text-white">{plan.price}</span>
-          <span className="text-text-2 text-sm">{plan.period}</span>
-        </div>
-        <p className={`text-sm ${plan.highlighted ? 'text-white/70' : 'text-text-2'}`}>{plan.desc}</p>
-      </div>
-            <ul className="flex flex-col gap-3 mb-8 flex-1">
-        {plan.features.map((f, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: plan.highlighted ? '#fff' : 'var(--kurso-primary)' }} />
-            <span className={plan.highlighted ? 'text-white/90' : 'text-text-2'}>{f}</span>
-          </li>
-        ))}
-      </ul>
-      <Link
-        href="/login"
-        className={`w-full py-3 rounded-xl font-medium text-center transition-all text-sm ${plan.highlighted
-          ? 'bg-white text-black hover:bg-white/90'
-          : 'text-white hover:opacity-90 glow'
-          }`}
-        style={plan.highlighted ? {} : { background: 'var(--kurso-primary)' }}
-      >
-        {plan.cta}
-      </Link>
     </div>
   )
 }
@@ -765,27 +666,16 @@ export default function HomePage() {
 
       {/* ── PRICING ── */}
       <section id="pricing" className="py-24 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
               Simple <span className="gradient-text">pricing</span>
             </h2>
             <p className="text-text-2 font-light max-w-xl mx-auto">
-              Start free — build your course and test it across every platform. No cost, and no plan
-              required, until you're ready to go live.
+              No monthly plan and nothing to pay upfront. Build and test for free, and pay only a small share of what you earn.
             </p>
           </div>
 
-                    
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start mb-6">
-            {plans.map((p, i) => <PlanCard key={i} plan={p} />)}
-          </div>
-
-          <div className="text-center mb-10">
-            <span className="text-text-3 text-sm">or</span>
-          </div>
-
-          {/* Pay As You Earn — the real, self-serve flexible option */}
           <div className="rounded-2xl p-8 md:p-10 relative overflow-hidden"
             style={{ border: '1px solid rgba(247,149,20,0.35)', background: 'rgba(247,149,20,0.04)' }}>
             <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at top left, rgba(247,149,20,0.12), transparent 60%)' }} />
@@ -794,54 +684,67 @@ export default function HomePage() {
                 <div>
                   <span className="inline-block text-xs font-bold px-3 py-1 rounded-full mb-3"
                     style={{ background: 'var(--kurso-primary)', color: '#fff' }}>
-                    ZERO RISK
+                    PAY AS YOU EARN
                   </span>
-                  <h3 className="text-2xl md:text-3xl font-bold text-white mb-2">Pay As You Earn</h3>
+                  <h3 className="text-2xl md:text-3xl font-bold text-white mb-2">One plan for everyone</h3>
                   <p className="text-text-2 max-w-lg">
-                    No upfront cost, no monthly bill. We only get paid when you do — a small cut of
-                    what you actually collect, nothing when a month is slow.
+                    We only get paid when you do. A small cut of what students pay you, and nothing in a month with no sales.
                   </p>
                 </div>
                 <div className="text-center flex-shrink-0">
-                  <div className="text-5xl font-bold" style={{ color: 'var(--kurso-primary)' }}>5%</div>
-                  <div className="text-text-3 text-xs mt-1">per sale, up to 300 students</div>
+                  <div className="text-5xl font-bold" style={{ color: 'var(--kurso-primary)' }}>{PAYE_BASE_RATE}%</div>
+                  <div className="text-text-2 text-sm mt-1">on courses and workshops</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="glass rounded-xl overflow-hidden mb-6">
+                <div className="grid grid-cols-2 text-sm font-semibold text-text-2 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span>What you sell</span>
+                  <span className="text-right">What we take</span>
+                </div>
+                <div className="grid grid-cols-2 text-sm px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-white">Courses and workshops, up to {PAYE_STUDENT_THRESHOLD} paid students</span>
+                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>{PAYE_BASE_RATE}%</span>
+                </div>
+                <div className="grid grid-cols-2 text-sm px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-white">Beyond {PAYE_STUDENT_THRESHOLD} paid students</span>
+                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>{PAYE_OVERFLOW_RATE}%</span>
+                </div>
+                <div className="grid grid-cols-2 text-sm px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-white">Ebooks, in months you collect ₹500 or more</span>
+                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>4%</span>
+                </div>
+                <div className="grid grid-cols-2 text-sm px-4 py-3">
+                  <span className="text-white">Telegram and email delivery</span>
+                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>Free</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 {[
-                  { title: '₹0 upfront', desc: 'Full access to WhatsApp + Telegram delivery from day one — nothing to pay to get started.' },
-                  { title: 'Only when you earn', desc: "Made ₹0 this month? You owe ₹0. We invoice you monthly, only on what you actually collected." },
-                  { title: 'A slow month happens', desc: 'Request a waiver right from your dashboard — we review it and your course stays live either way.' },
+                  { title: '₹0 upfront', desc: 'No monthly plan and no setup fee. Build and test everything for free.' },
+                  { title: 'Only when you earn', desc: 'We invoice once a month, on what students actually paid you after coupons and refunds.' },
+                  { title: 'A slow month happens', desc: 'Ask to waive the commission from your dashboard. Your course stays live either way.' },
                 ].map((item, i) => (
                   <div key={i} className="glass rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-1.5">
                       <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--kurso-primary)' }} />
                       <span className="text-white font-medium text-sm">{item.title}</span>
                     </div>
-                    <p className="text-text-2 text-xs leading-relaxed">{item.desc}</p>
+                    <p className="text-text-2 text-sm leading-relaxed">{item.desc}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Published tier table — no surprises later */}
-              <div className="glass rounded-xl overflow-hidden mb-8">
-                <div className="grid grid-cols-2 text-xs font-semibold text-text-3 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-                  <span>Active paid students</span>
-                  <span className="text-right">Commission</span>
-                </div>
-                <div className="grid grid-cols-2 text-sm px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
-                  <span className="text-white">Up to {PAYE_STUDENT_THRESHOLD}</span>
-                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>{PAYE_BASE_RATE}%</span>
-                </div>
-                <div className="grid grid-cols-2 text-sm px-4 py-3">
-                  <span className="text-white">Beyond {PAYE_STUDENT_THRESHOLD}</span>
-                  <span className="text-right font-semibold" style={{ color: 'var(--kurso-primary)' }}>{PAYE_OVERFLOW_RATE}%</span>
-                </div>
+              <div className="rounded-xl p-4 mb-8" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <p className="text-sm text-text-2 leading-relaxed">
+                  <span className="text-white font-semibold">WhatsApp messages are charged separately.</span>{' '}
+                  Meta bills for each WhatsApp message it delivers, and we pass that cost on at Meta&apos;s rate. It is not part of the percentages above.{' '}
+                  <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: 'var(--kurso-primary)' }}>
+                    See Meta&apos;s pricing
+                  </a>
+                </p>
               </div>
-              <p className="text-text-3 text-xs mb-8 -mt-4">
-                This is the complete rate card — published upfront, same as your monthly invoice will show. No hidden fees beyond this.
-              </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Link
@@ -852,7 +755,7 @@ export default function HomePage() {
                   Get Started Free
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <span className="text-text-3 text-xs">No card required to start building — pick this plan when you're ready to go live.</span>
+                <span className="text-text-2 text-sm">No card needed. Full details, rates and your usage are on your billing page.</span>
               </div>
             </div>
           </div>

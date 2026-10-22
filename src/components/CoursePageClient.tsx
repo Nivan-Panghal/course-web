@@ -135,7 +135,7 @@ export default function CoursePageClient({ course, variant, buttonText }: Props)
               Test This Course
             </button>
             <p className="text-xs text-center w-full" style={{ color: '#9ca3af' }}>
-              Not live yet — students can't enroll until you upgrade. Test the WhatsApp/Telegram delivery yourself first.
+              Not live yet — students can't enroll until you publish this course. Test the WhatsApp/Telegram delivery yourself first.
             </p>
           </div>
           {showTestModal && (

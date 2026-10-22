@@ -25,9 +25,11 @@ export async function countHeldSpots(
   let confirmedQuery = supabase
     .from('workshop_registrations')
     .select('id', { count: 'exact', head: true })
-    .eq('workshop_id', workshopId)
-    .eq('payment_status', 'confirmed')
-  if (excludeRegistrationId) confirmedQuery = confirmedQuery.neq('id', excludeRegistrationId)
+.eq('workshop_id', workshopId)
+.eq('payment_status', 'confirmed')
+.is('refunded_at', null) // a fully refunded student gives their seat back
+
+if (excludeRegistrationId) confirmedQuery = confirmedQuery.neq('id', excludeRegistrationId)
   const { count: confirmed, error: confirmedError } = await confirmedQuery
   if (confirmedError) throw confirmedError
 

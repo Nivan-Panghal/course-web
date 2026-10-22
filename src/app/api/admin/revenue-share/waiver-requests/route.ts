@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
         const { data: reqRow, error: reqErr } = await supabase
       .from('revenue_share_waiver_requests')
-      .select('id, creator_id, invoice_id, status, revenue_share_invoices(product_type)')
+      .select('id, creator_id, invoice_id, status, revenue_share_invoices(product_type, whatsapp_amount)')
       .eq('id', requestId)
       .maybeSingle()
     if (reqErr) throw reqErr
@@ -45,7 +45,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Already ${reqRow.status}` }, { status: 400 })
     }
 
-    if (decision === 'approved') {
+    // WhatsApp message charges are Meta's real cost, so a waiver only removes the commission.
+    // If any WhatsApp charges are on the invoice, they stay due and the invoice stays open.
+    const whatsappPart = Number((reqRow as any).revenue_share_invoices?.whatsapp_amount) || 0
+
+    if (decision === 'approved' && whatsappPart > 0) {
+      const { error: partErr } = await supabase
+        .from('revenue_share_invoices')
+        .update({ commission_amount: 0, total_amount_due: Math.round(whatsappPart) })
+        .eq('id', reqRow.invoice_id)
+      if (partErr) throw partErr
+    } else if (decision === 'approved') {
       const { error: waiveErr } = await supabase
         .from('revenue_share_invoices')
         .update({ status: 'waived' })

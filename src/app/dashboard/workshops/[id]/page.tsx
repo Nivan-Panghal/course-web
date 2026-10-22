@@ -29,6 +29,7 @@ import { ArrowLeft, Award, Check, Copy, ExternalLink, AlertTriangle, Sparkles, U
 import { FormCard, FormField, TextInput, TextArea, SelectInput, SegmentedControl } from '@/components/WorkshopFormFields'
 import { StringListEditor, AgendaEditor, FaqEditor } from '@/components/WorkshopListEditors'
 import AiFieldAssist from '@/components/AiFieldAssist'
+import ChannelSwitches from '@/components/ChannelSwitches'
 import { ImageUploadField, PolicyDocField, TestimonialsEditor } from '@/components/WorkshopMediaFields'
 import { BonusesEditor, CustomSectionsEditor, FontPairPicker, SectionList, ThemePicker, ToggleSwitch } from '@/components/WorkshopDesignFields'
 import { DEFAULT_LANDING_THEME_ID } from '@/lib/landing-themes'
@@ -71,7 +72,11 @@ import {
   type WorkshopSectionType,
 } from '@/lib/workshop-landing-config'
 
-type WorkshopForm = WorkshopFormValues & WorkshopContentValues & WorkshopBrandingValues & WorkshopDesignValues
+type WorkshopForm = WorkshopFormValues & WorkshopContentValues & WorkshopBrandingValues & WorkshopDesignValues & {
+  /** Email is always on, so only WhatsApp and Telegram can be switched. */
+  notifyWhatsapp: boolean
+  notifyTelegram: boolean
+}
 type Tab = WorkshopSection
 type DocKey = 'refundDoc' | 'termsDoc' | 'privacyDoc'
 
@@ -100,8 +105,7 @@ const EMPTY_FORM: WorkshopForm = {
   testimonials: [], languages: [], level: '', videoUrls: [''], videoHeading: '',
   brandName: '', brandLogo: '', coverImage: '', contactDetails: [], socialLinks: [],
   refundDoc: '', termsDoc: '', privacyDoc: '',
-  theme: DEFAULT_LANDING_THEME_ID, fontPair: 'theme-default', landingConfig: normalizeWorkshopLandingConfig(null),
-}
+theme: DEFAULT_LANDING_THEME_ID, fontPair: 'theme-default', landingConfig: normalizeWorkshopLandingConfig(null), notifyWhatsapp: true, notifyTelegram: true, }
 
 const digitsOnly = (v: string) => v.replace(/\D/g, '')
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
@@ -143,9 +147,10 @@ function rowToForm(row: any): WorkshopForm {
     refundDoc: str(row.refund_policy_storage_path), termsDoc: str(row.terms_storage_path), privacyDoc: str(row.privacy_storage_path),
     theme: str(row.landing_theme) || DEFAULT_LANDING_THEME_ID,
     fontPair: str(row.landing_font_pair) || 'theme-default',
-    landingConfig: normalizeWorkshopLandingConfig(row.landing_config),
-  }
-}
+landingConfig: normalizeWorkshopLandingConfig(row.landing_config),
+notifyWhatsapp: row.notify_whatsapp !== false,
+notifyTelegram: row.notify_telegram !== false,
+} }
 
 export default function WorkshopSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -281,11 +286,25 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
       for (const { key } of POLICY_DOCS) {
         if (savedForm[key] && savedForm[key] !== form[key]) void removePublicFile(savedForm[key])
       }
-      setSavedForm(form)
-      setSavedFlash(true)
-      setTimeout(() => setSavedFlash(false), 2500)
-    } catch (err: any) {
-      console.error('[workshop settings] unexpected save failure', err)
+  // Channel switches are saved on their own, and only when changed, so the rest of the page
+  // always saves even if the channel columns have not been set up yet.
+  if (form.notifyWhatsapp !== savedForm.notifyWhatsapp || form.notifyTelegram !== savedForm.notifyTelegram) {
+    const { error: channelError } = await supabase
+      .from('workshops')
+      .update({ notify_whatsapp: form.notifyWhatsapp, notify_telegram: form.notifyTelegram })
+      .eq('id', id)
+      .eq('creator_id', creatorId)
+    if (channelError) {
+      console.error('[workshop settings] channel save failed', channelError)
+      setError('Your page was saved, but the channel switches could not be saved yet: ' + channelError.message)
+      return
+    }
+  }
+  setSavedForm(form)
+  setSavedFlash(true)
+  setTimeout(() => setSavedFlash(false), 2500)
+} catch (err: any) {
+  console.error('[workshop settings] unexpected save failure', err)
       setError(err?.message || 'Something went wrong. Please try again.')
     } finally {
       setSaving(false)
@@ -565,9 +584,14 @@ export default function WorkshopSettingsPage({ params }: { params: Promise<{ id:
 
             <FormCard title="Joining link" tag="recommended" description="Attendees can't join without it.">
               <FormField label="Zoom / Google Meet link" htmlFor="ws-zoom"
-                hint="Only confirmed registrants receive it, by WhatsApp or Telegram. It is never shown on your public page.">
+                hint="Only confirmed registrants receive it, by email and on the channels you switch on below. It is never shown on your public page.">
                 <TextInput id="ws-zoom" type="url" value={form.zoomLink} onChange={v => set('zoomLink', v)} placeholder="https://zoom.us/j/..." />
               </FormField>
+            </FormCard>
+
+            <FormCard title="How students hear from you" description="Choose where confirmations and reminders go. Email is always on.">
+              <ChannelSwitches kind="workshop" whatsapp={form.notifyWhatsapp} telegram={form.notifyTelegram}
+                onChange={next => setForm(prev => ({ ...prev, notifyWhatsapp: next.whatsapp, notifyTelegram: next.telegram }))} />
             </FormCard>
           </div>
         )}

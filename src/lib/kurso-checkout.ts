@@ -50,8 +50,9 @@ export async function pollOrderStatus(clientTxnId: string, attemptsLeft = 8): Pr
  *    access during the trial, so nothing blocks testing/onboarding)
  *  - trial expired and no active subscription/agreement → null (nothing unlocked)
  */
-export async function getEffectivePlanId(creatorId: string, trialEndsAt?: string | null): Promise<SubscriptionPlanId | null> {
-  const { data: revShare } = await supabase
+export async function getEffectivePlanId(creatorId: string, trialEndsAt?: string | null): Promise<SubscriptionPlanId | null> { // Everyone is Pay As You Earn now: every creator can use every channel (WhatsApp, Telegram, web). // WhatsApp message charges are billed on the monthly invoice instead of being locked behind a plan. // The older flat-plan logic below is kept only for reference and is no longer reached. if (creatorId) return 'both'
+
+const { data: revShare } = await supabase
     .from('revenue_share_agreements')
     .select('id')
     .eq('creator_id', creatorId)
