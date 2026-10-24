@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { issueWorkshopCertificate, type WorkshopForCertificate } from '@/lib/workshop-certificate'
 import { deliverWorkshopCertificate } from '@/lib/workshop-certificate-delivery'
+import { getWorkshopChannels } from '@/lib/workshop-channels'
 
 export const maxDuration = 60
 
@@ -99,6 +100,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'setup_needed' }, { status: 409 })
     }
     const byReg = new Map((certs || []).map(c => [c.registration_id, c]))
+        // Telegram can be switched off per workshop. Email is always on.
+    const channels = await getWorkshopChannels(supabase, workshop.id)
 
     return NextResponse.json({
       workshop: {
@@ -116,7 +119,7 @@ export async function GET(req: NextRequest) {
         name: r.name,
         phoneEnd: String(r.phone || '').slice(-4),
         attended: !!r.attended,
-        hasTelegram: !!r.telegram_chat_id,
+        hasTelegram: !!r.telegram_chat_id && channels.telegram,
         hasEmail: !!r.email,
         certificate: byReg.get(r.id)
           ? {
@@ -173,6 +176,8 @@ export async function POST(req: NextRequest) {
       .eq('workshop_id', workshop.id)
       .in('registration_id', ids)
     const had = new Map((existing || []).map(c => [c.registration_id, c]))
+        // Telegram can be switched off per workshop. Email is always on.
+    const channels = await getWorkshopChannels(supabase, workshop.id)
 
     type Outcome = 'sent' | 'already_sent' | 'no_contact' | 'delivery_failed' | 'failed'
     const results: { id: string; name: string; outcome: Outcome; telegram: boolean; email: boolean }[] = []
@@ -198,13 +203,14 @@ export async function POST(req: NextRequest) {
           registration: { id: person.id, name: person.name },
         })
 
-        if (!person.telegram_chat_id && !person.email) {
+        if (!(person.telegram_chat_id && channels.telegram) && !person.email) {
           results.push({ ...row, outcome: 'no_contact' })
           continue
         }
 
         const sent = await deliverWorkshopCertificate(supabase, {
           creatorId: workshop.creator_id,
+          workshopId: workshop.id,
           workshopTitle: workshop.title,
           registration: person,
           certificate,

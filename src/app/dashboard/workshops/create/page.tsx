@@ -63,7 +63,7 @@ export default function CreateWorkshopPage() {
   const [takeaways, setTakeaways] = useState(['', '', ''])
   const [zoomLink, setZoomLink] = useState('')
   // How students hear from you. Email is always on, so only these two are choices.
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(true)
+    const [notifyWhatsapp, setNotifyWhatsapp] = useState(false)
   const [notifyTelegram, setNotifyTelegram] = useState(true)
   const [showMore, setShowMore] = useState(false)
   const [capacity, setCapacity] = useState('')
@@ -140,7 +140,7 @@ export default function CreateWorkshopPage() {
         .from('workshops')
     // The channel columns are only written when a switch was turned off (the default is on),
     // so creating a workshop never depends on them being set up.
-    .insert({ creator_id: user.id, slug, status: 'published', ...result.data, ...(notifyWhatsapp ? {} : { notify_whatsapp: false }), ...(notifyTelegram ? {} : { notify_telegram: false }) })
+    .insert({ creator_id: user.id, slug, status: 'published', ...result.data, notify_whatsapp: notifyWhatsapp, notify_telegram: notifyTelegram })
         .select('slug')
         .single()
 

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { escapeHtml, sendLoggedEmail } from '@/lib/email'
+import { getWorkshopChannels } from '@/lib/workshop-channels'
 
 export const maxDuration = 60
 
@@ -87,13 +88,18 @@ export async function GET(req: NextRequest) {
     const reviewed = new Set((reviews || []).map(r => r.registration_id))
     const now = Date.now()
 
+    // Telegram can be switched off per workshop. Email is always on.
+    const channelList = await Promise.all(workshops.map(w => getWorkshopChannels(supabase, w.id)))
+    const channelsOf = new Map(workshops.map((w, i) => [w.id, channelList[i]]))
+
     return NextResponse.json({
       workshops: workshops.map(w => {
         const mine = (regs || []).filter(r => r.workshop_id === w.id)
         const started = new Date(w.date_time).getTime() <= now
+        const telegramOn = channelsOf.get(w.id)?.telegram !== false
         const askable = started
           ? mine.filter(r =>
-              (r.telegram_chat_id || r.email) &&
+              ((r.telegram_chat_id && telegramOn) || r.email) &&
               !reviewed.has(r.id) &&
               (!r.review_requested_at || now - new Date(r.review_requested_at).getTime() > ASK_AGAIN_AFTER_MS)
             ).length
@@ -161,8 +167,11 @@ export async function POST(req: NextRequest) {
       const reviewed = new Set((done || []).map(d => d.registration_id))
       const now = Date.now()
 
+      // Telegram can be switched off for this workshop. Email is always on.
+      const channels = await getWorkshopChannels(supabase, workshop.id)
+
       const people = (regs || []).filter(r =>
-        (r.telegram_chat_id || r.email) &&
+        ((r.telegram_chat_id && channels.telegram) || r.email) &&
         !reviewed.has(r.id) &&
         (!r.review_requested_at || now - new Date(r.review_requested_at).getTime() > ASK_AGAIN_AFTER_MS)
       )
@@ -179,7 +188,7 @@ export async function POST(req: NextRequest) {
         await Promise.all(people.slice(i, i + CHUNK).map(async p => {
           const url = `${SITE()}/workshop-review/${p.review_token}`
           const [t, e] = await Promise.all([
-            p.telegram_chat_id ? sendTelegram(p.telegram_chat_id, `⭐ How was “${workshop.title}”?\n\nRate it in about 20 seconds:\n${url}\n\nNot happy? You can ask for a refund here:\n${SITE()}/workshop-refund/${p.review_token}`) : Promise.resolve(null),
+            p.telegram_chat_id && channels.telegram ? sendTelegram(p.telegram_chat_id, `⭐ How was “${workshop.title}”?\n\nRate it in about 20 seconds:\n${url}\n\nNot happy? You can ask for a refund here:\n${SITE()}/workshop-refund/${p.review_token}`) : Promise.resolve(null),
             p.email
               ? sendLoggedEmail({
                   supabase,

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { escapeHtml, sendLoggedEmail } from '@/lib/email'
+import { getWorkshopChannels } from '@/lib/workshop-channels'
 
 export const maxDuration = 60
 
@@ -75,7 +76,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Could not load the people to message.' }, { status: 500 })
     }
 
-    const reachable = (people || []).filter(p => p.telegram_chat_id || p.email)
+    // The creator can switch Telegram off for this workshop. Email is always on.
+    const channels = await getWorkshopChannels(supabase, workshop.id)
+    const reachable = (people || []).filter(p => (p.telegram_chat_id && channels.telegram) || p.email)
     const unreachable = (people || []).length - reachable.length
     if (reachable.length === 0) {
       return NextResponse.json({ error: 'No one in this workshop has Telegram or an email yet.' }, { status: 400 })
@@ -100,7 +103,7 @@ export async function POST(req: NextRequest) {
       const group = reachable.slice(i, i + CHUNK)
       await Promise.all(group.map(async p => {
         const [t, e] = await Promise.all([
-          p.telegram_chat_id ? sendTelegram(p.telegram_chat_id, telegramText) : Promise.resolve(null),
+          p.telegram_chat_id && channels.telegram ? sendTelegram(p.telegram_chat_id, telegramText) : Promise.resolve(null),
           p.email
             ? sendLoggedEmail({
                 supabase,

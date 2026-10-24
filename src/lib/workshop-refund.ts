@@ -15,6 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { executeGatewayRefund, RefundExecutionError } from '@/lib/gateway-refund'
 import { getCreatorGatewayByProvider } from '@/lib/gateway-checkout'
 import { escapeHtml, sendLoggedEmail } from '@/lib/email'
+import { getWorkshopChannels } from '@/lib/workshop-channels'
 
 export const WORKSHOP_REFUND_WINDOW_DAYS = 7
 export const MAX_REFUND_REASON = 500
@@ -57,6 +58,8 @@ async function notifyStudentOfRefundDecision(
       .maybeSingle()
     if (!reg || (!reg.email && !reg.telegram_chat_id)) return none
     const { data: w } = await supabase.from('workshops').select('title, host_name, brand_name, price').eq('id', reg.workshop_id).maybeSingle()
+    // The creator can switch Telegram off for this workshop. Email is always on.
+    const channels = await getWorkshopChannels(supabase, reg.workshop_id)
 
     const host = w?.brand_name || w?.host_name || 'The host'
     const title = w?.title || 'the workshop'
@@ -79,7 +82,7 @@ async function notifyStudentOfRefundDecision(
     }
 
     const [telegram, email] = await Promise.all([
-      reg.telegram_chat_id ? sendTelegramText(reg.telegram_chat_id, `Hi ${first},\n\n${lines.join('\n\n')}\n\nDetails: ${url}`) : Promise.resolve(false),
+      reg.telegram_chat_id && channels.telegram ? sendTelegramText(reg.telegram_chat_id, `Hi ${first},\n\n${lines.join('\n\n')}\n\nDetails: ${url}`) : Promise.resolve(false),
       reg.email
         ? sendLoggedEmail({
             supabase,

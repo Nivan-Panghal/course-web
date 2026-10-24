@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { escapeHtml, sendLoggedEmail } from './email'
+import { getWorkshopChannels } from './workshop-channels'
 
 export type DeliveryResult = { telegram: boolean; email: boolean }
 
@@ -40,14 +41,20 @@ export async function deliverWorkshopCertificate(
   supabase: SupabaseClient,
   params: {
     creatorId: string
+    workshopId?: string
     workshopTitle: string
     registration: { id: string; name: string; email: string | null; telegram_chat_id: string | number | null }
     certificate: { certificateId: string; pdfUrl: string; pdfBytes?: Uint8Array }
   },
 ): Promise<DeliveryResult> {
-  const { creatorId, workshopTitle, registration, certificate } = params
+  const { creatorId, workshopId, workshopTitle, registration, certificate } = params
   const result: DeliveryResult = { telegram: false, email: false }
-  if (!registration.telegram_chat_id && !registration.email) return result
+
+  // The creator can switch Telegram off for this workshop. Email is always on.
+  // If the lookup fails, Telegram counts as ON (see workshop-channels.ts).
+  const channels = workshopId ? await getWorkshopChannels(supabase, workshopId) : { whatsapp: true, telegram: true }
+  const useTelegram = !!registration.telegram_chat_id && channels.telegram
+  if (!useTelegram && !registration.email) return result
 
   // Fresh PDFs come with their bytes. For a re-send, download the saved file.
   let bytes = certificate.pdfBytes
@@ -66,9 +73,9 @@ export async function deliverWorkshopCertificate(
   const fileName = `Certificate-${safeName}.pdf`
 
   const [telegram, email] = await Promise.all([
-    registration.telegram_chat_id
+    useTelegram
       ? sendOnTelegram(
-          registration.telegram_chat_id,
+          registration.telegram_chat_id!,
           bytes,
           fileName,
           `🎓 Congratulations ${registration.name}! Here is your certificate for “${workshopTitle}”.\n\nAnyone can check it is real here:\n${verifyUrl}`,
