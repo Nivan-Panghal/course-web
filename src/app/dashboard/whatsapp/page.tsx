@@ -161,9 +161,9 @@ export default function WhatsAppNumberPage() {
   const canConnect = Boolean(conn?.available && APP_ID && CONFIG_ID)
 
   return (
-    <div className="flex min-h-screen bg-black">
+    <div className="min-h-screen bg-black">
       <Sidebar />
-      <main className="flex-1 p-6 md:p-10 max-w-3xl">
+      <main className="md:ml-56 p-6 md:p-8 pt-20 md:pt-8 max-w-3xl">
         <h1 className="text-2xl font-bold text-white mb-1">Your WhatsApp number</h1>
         <p className="text-sm mb-6" style={body}>Send messages from your own number, so students see your name. Meta charges you directly, so nothing for WhatsApp messages appears on your Kurso invoice.</p>
 
