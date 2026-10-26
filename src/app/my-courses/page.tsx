@@ -8,6 +8,7 @@ import {
   LogOut, MessageCircle, Layers, Download, ExternalLink,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useWhatsAppNumbers } from '@/lib/use-whatsapp-number'
 import { resolveAccountType } from '@/lib/account'
 import { slugify } from '@/lib/utils'
 import RefundRequestButton from '@/components/RefundRequestButton'
@@ -93,6 +94,7 @@ export default function MyCoursesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [courses, setCourses] = useState<EnrolledCourse[]>([])
+  const waNumbers = useWhatsAppNumbers(courses.map(c => c.courseId)) // each course's creator may have their own number
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
     const [certGenerating, setCertGenerating] = useState<Set<string>>(new Set())
@@ -690,7 +692,7 @@ export default function MyCoursesPage() {
 
                   {/* WhatsApp strip */}
                   {(() => {
-                    const waNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
+                    const waNumber = waNumbers[c.courseId]
                     const hasWaToken = c.whatsappToken && c.whatsappTokenExpiresAt && new Date(c.whatsappTokenExpiresAt) > new Date()
                     const waDeliveryAllowed = c.deliveryMethod === 'whatsapp' || c.deliveryMethod === 'both'
                     if (!waNumber || !hasWaToken || !waDeliveryAllowed) return null

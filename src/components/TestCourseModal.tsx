@@ -19,6 +19,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Send, MessageCircle, FlaskConical } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useWhatsAppNumber } from '@/lib/use-whatsapp-number'
 
 export default function TestCourseModal({
   courseId,
@@ -33,6 +34,7 @@ export default function TestCourseModal({
   courseUrl: string
   onClose: () => void
 }) {
+  const waNumber = useWhatsAppNumber(courseId) // the creator's own number if they connected one
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [telegramUsername, setTelegramUsername] = useState('')
@@ -94,7 +96,7 @@ export default function TestCourseModal({
       
 
       const wantsTelegram = Boolean(telegramUsernameForLink)
-      const wantsWhatsApp = Boolean(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER)
+      const wantsWhatsApp = Boolean(waNumber)
 
       const out: { telegramToken?: string; whatsappToken?: string; courseDelivery: string } = { courseDelivery }
 
@@ -211,7 +213,7 @@ export default function TestCourseModal({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {result.whatsappToken ? (
                 <a
-                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}?text=${encodeURIComponent(`/start ${result.whatsappToken}`)}`}
+                  href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`/start ${result.whatsappToken}`)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="min-h-11 flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm font-semibold text-white text-center"

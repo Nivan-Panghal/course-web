@@ -30,6 +30,7 @@ import WatermarkedPlayer from '@/components/WatermarkedPlayer'
 import { isLessonFree } from '@/lib/freeLesson'
 import LessonQA from '@/components/LessonQA'
 import LessonAI from '@/components/LessonAI'
+import { useWhatsAppNumber } from '@/lib/use-whatsapp-number'
 
 
 interface Lesson {
@@ -185,6 +186,7 @@ function PdfViewer({ src, isMobile }: { src: string; isMobile: boolean }) {
 export default function CourseLearnPage() {
   const { courseId } = useParams<{ creatorName: string; courseName: string; courseId: string }>()
   const router = useRouter()
+  const waNumber = useWhatsAppNumber(courseId) // the creator's own number if they connected one
 
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -436,7 +438,6 @@ export default function CourseLearnPage() {
   //    right before opening WhatsApp, so this no longer needs polling.
   useEffect(() => {
     if (!isEnrolled || !enrollment || !course) return
-    const waNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
     if (!waNumber) return
 
     let cancelled = false
@@ -466,7 +467,6 @@ export default function CourseLearnPage() {
   // ── WhatsApp demo token (free preview, not yet enrolled) ─────────────────────
   useEffect(() => {
     if (!user || isEnrolled || !course || demoWhatsappToken) return
-    const waNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
     if (!waNumber) return
 
     fetchDemoToken('whatsapp', {
@@ -1523,7 +1523,7 @@ export default function CourseLearnPage() {
 
 
               {/* WhatsApp CTA — enrolled students get "Continue", preview visitors get "Start Free" */}
-              {process.env.NEXT_PUBLIC_WHATSAPP_NUMBER && whatsappDeliveryAllowed && (
+              {waNumber && whatsappDeliveryAllowed && (
                 isEnrolled ? (
                   <div style={{ padding: 16, borderRadius: 12, background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
                     <div>
@@ -1532,7 +1532,7 @@ export default function CourseLearnPage() {
                     </div>
                     {enrolledWhatsappToken ? (
                       <a
-                        href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}?text=${encodeURIComponent('/start ' + enrolledWhatsappToken)}`}
+                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent('/start ' + enrolledWhatsappToken)}`}
                         target="_blank" rel="noopener noreferrer"
                         onClick={(e) => {
                           if (!enrollment || !course) return
@@ -1554,7 +1554,7 @@ export default function CourseLearnPage() {
                             const liveToken = fresh.token || enrolledWhatsappToken
                             if (fresh.token && fresh.token !== enrolledWhatsappToken) setEnrolledWhatsappToken(fresh.token)
                             window.open(
-                              `https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}?text=${encodeURIComponent('/start ' + liveToken)}`,
+                              `https://wa.me/${waNumber}?text=${encodeURIComponent('/start ' + liveToken)}`,
                               '_blank', 'noopener,noreferrer'
                             )
                           }).catch(() => window.open(fallbackHref, '_blank', 'noopener,noreferrer'))
@@ -1578,7 +1578,7 @@ export default function CourseLearnPage() {
                     {user ? (
                       demoWhatsappToken ? (
                         <a
-                          href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}?text=${encodeURIComponent('/start ' + demoWhatsappToken)}`}
+                          href={`https://wa.me/${waNumber}?text=${encodeURIComponent('/start ' + demoWhatsappToken)}`}
                           target="_blank" rel="noopener noreferrer"
                           style={{ padding: '8px 16px', borderRadius: 10, background: '#25D366', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                           Start Free on WhatsApp

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, BookOpen, Users, Settings, LogOut, Menu, X, Zap, IndianRupee, Ticket, Megaphone, BarChart3, ClipboardList, Undo, Library, MessageSquareWarning, Star, Calendar } from 'lucide-react'
+import { LayoutDashboard, BookOpen, Users, Settings, LogOut, Menu, X, Zap, IndianRupee, Ticket, Megaphone, BarChart3, ClipboardList, Undo, Library, MessageSquareWarning, Star, Calendar, Phone } from 'lucide-react'
 import Logo from './Logo'
 import { supabase } from '@/lib/supabase'
 
@@ -20,6 +20,7 @@ const navItems = [
   { label: 'Coupons', href: '/dashboard/coupons', icon: Ticket },
   { label: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+  { label: 'WhatsApp Number', href: '/dashboard/whatsapp', icon: Phone },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 

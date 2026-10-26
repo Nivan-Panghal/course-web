@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { X, Mail, User, Phone, Eye, EyeOff, Shield, Lock, ArrowRight, Search, ChevronDown, Play, MessageCircle, Ticket, CheckCircle2, LayoutGrid } from 'lucide-react'
 import { slugify } from '@/lib/utils'
 import { useBrandVars } from '@/components/BrandVarsContext'
+import { useWhatsAppNumber } from '@/lib/use-whatsapp-number'
 
 // `length` = expected number of digits for that country's mobile number,
 // EXCLUDING the country code. Used to validate/cap the phone input instead
@@ -310,8 +311,7 @@ function TokenLoading({ color, label }: { color: string; label: string }) {
 }
 
 // ── WhatsApp button ──────────────────────────────────────────────
-function WhatsAppButton({ token, label }: { token: string; label?: string }) {
-  const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ''
+function WhatsAppButton({ token, label, number }: { token: string; label?: string; number: string }) {
   const href = `https://wa.me/${number}?text=${encodeURIComponent('/start ' + token)}`
   return (
     <a
@@ -367,7 +367,8 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
   const [generatingPaid, setGeneratingPaid] = useState(false)
 
   const hasTelegram = Boolean(course.telegramBotUsername)
-  const hasWhatsApp = Boolean(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER)
+  const waNumber = useWhatsAppNumber(course.id) // the creator's own number if they connected one
+  const hasWhatsApp = Boolean(waNumber)
   // A course is "nothing free" when it has no free lessons AND is not free-course —
   // meaning there's no preview to offer before payment.
   const isNothingFree = !course.is_free_course && course.price > 0
@@ -1136,7 +1137,7 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
               {/* WhatsApp */}
               {hasWhatsApp && (
                 demoWhatsappToken
-                  ? <WhatsAppButton token={demoWhatsappToken} label="Start Free Lessons on WhatsApp" />
+                  ? <WhatsAppButton token={demoWhatsappToken} number={waNumber} label="Start Free Lessons on WhatsApp" />
                   : <TokenLoading color="rgba(37,211,102,0.5)" label="Preparing WhatsApp link…" />
               )}
 
@@ -1379,7 +1380,7 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
               {/* WhatsApp */}
               {hasWhatsApp && (
                 whatsappToken
-                  ? <WhatsAppButton token={whatsappToken} label="Start on WhatsApp" />
+                  ? <WhatsAppButton token={whatsappToken} number={waNumber} label="Start on WhatsApp" />
                   : generatingPaid
                     ? <TokenLoading color="rgba(37,211,102,0.6)" label="Generating your WhatsApp link…" />
                     : null

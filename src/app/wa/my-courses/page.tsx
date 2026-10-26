@@ -17,6 +17,7 @@
 import { useEffect, useState, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { BookOpen, MessageCircle, Shield } from 'lucide-react'
+import { useWhatsAppNumber } from '@/lib/use-whatsapp-number'
 
 interface Course {
   enrollmentId: string
@@ -47,7 +48,7 @@ export default function WhatsAppMyCoursesPage() {
   const searchParams = useSearchParams()
   const [courses, setCourses] = useState<Course[] | null>(null)
   const [invalid, setInvalid] = useState(false)
-  const waNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ''
+  const waNumber = useWhatsAppNumber(courses?.[0]?.courseId) // the creator's own number if they connected one
 
   useEffect(() => {
     async function load() {

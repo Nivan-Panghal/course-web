@@ -105,7 +105,7 @@ export default function WhatsAppNumberPage() {
           config_id: CONFIG_ID,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+          extras: { setup: {} },
         })
       })
       if (!code) { setBusy(false); return } // closed the popup
