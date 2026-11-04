@@ -15,7 +15,7 @@ import { resolveAccountType } from '@/lib/account'
 // TODO: paste your screen-recording link here (YouTube embed URL or hosted .mp4)
 // e.g. 'https://www.youtube.com/embed/XXXXXXXXXXX'
 // Leave empty to show the "coming soon" placeholder.
-const DEMO_VIDEO_URL: string = 'https://pub-e026ccf9cda1475dad7790cac878419c.r2.dev/demo/homepage-walkthrough.mp4'
+const DEMO_VIDEO_URL: string = 'https://pub-8b17a7f714244d57bcdc9f5ce179caa5.r2.dev/demo/homepage-walkthrough.mp4'
 
 // ─── DATA ───
 const features = [
