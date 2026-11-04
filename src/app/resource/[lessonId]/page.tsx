@@ -134,12 +134,19 @@ export default function LessonResourcePage({
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('lessons')
-        .select('id,title,course_id,order_num,summary_url,summary_name,notes_url,notes_name,quiz_questions')
-        .eq('id', lessonId)
-        .limit(1)
-      const l = data?.[0] || null
+      let l: LessonResource | null = null
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch(`/api/resource/lesson?lessonId=${lessonId}`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        })
+        if (res.ok) {
+          const json = await res.json()
+          l = json.lesson || null
+        }
+      } catch (e) {
+        console.error('[resource load]', e)
+      }
       setLesson(l)
 
       if (l && (type === 'quiz' || type === 'qa')) {

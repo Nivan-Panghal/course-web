@@ -280,12 +280,18 @@ export default function CourseLearnPage() {
         setCreatorProfile(null)
       }
 
-      const { data: lessonData } = await supabase
-        .from('lessons').select('*')
-        .eq('course_id', courseData.id)
-        .eq('is_published', true)
-        .order('order_num', { ascending: true })
-      const fetchedLessons = lessonData || []
+      let fetchedLessons: Lesson[] = []
+      try {
+        const lessonsRes = await fetch(`/api/course/lessons?courseId=${courseData.id}`, {
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        })
+        if (lessonsRes.ok) {
+          const lessonsJson = await lessonsRes.json()
+          fetchedLessons = lessonsJson.lessons || []
+        }
+      } catch (err) {
+        console.error('Failed to load lessons:', err)
+      }
       setLessons(fetchedLessons)
 
       const initialSearchParams = new URLSearchParams(window.location.search)

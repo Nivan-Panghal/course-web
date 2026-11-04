@@ -188,21 +188,21 @@ export default function MyCoursesPage() {
         // row is a stale column no longer kept in sync — the real total
         // is the last-lesson mark (same value certificate issuance uses),
         // or the published-lesson count if no lesson is marked last.
+        type LessonSummary = { course_id: string; order_num: number; is_last_lesson: boolean }
+        const lessonSummaryPromise: Promise<{ data: LessonSummary[] }> = fetch(
+          `/api/course/lessons?courseIds=${courseIds.join(',')}`
+        )
+          .then(r => (r.ok ? r.json() : { lessons: [] }))
+          .then(j => ({ data: (j.lessons || []) as LessonSummary[] }))
+          .catch(() => ({ data: [] as LessonSummary[] }))
+
         const [{ data: courseData }, { data: lessonData }, { data: lastLessonData }, { data: ratingData }] = await Promise.all([
           supabase
             .from('courses')
             .select('id, name, slug, host_name, creator_id, delivery')
             .in('id', courseIds),
-          supabase
-            .from('lessons')
-            .select('course_id')
-            .in('course_id', courseIds)
-            .eq('is_published', true),
-          supabase
-            .from('lessons')
-            .select('course_id, order_num')
-            .in('course_id', courseIds)
-            .eq('is_last_lesson', true),
+          lessonSummaryPromise,
+          lessonSummaryPromise.then(r => ({ data: r.data.filter(l => l.is_last_lesson) })),
           supabase
             .from('course_ratings')
             .select('enrollment_id')
