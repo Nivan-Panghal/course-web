@@ -1,7 +1,7 @@
 /**
  * src/app/api/admin/impersonate/[creatorId]/route.ts
  * ─────────────────────────────────────────────────────────────────
- * POST   — Nancy starts impersonating a creator. Returns a Supabase
+ * POST   — Admin starts impersonating a creator. Returns a Supabase
  *          magic-link token_hash the browser exchanges (via
  *          supabase.auth.verifyOtp) for a real session for that
  *          creator's account — see isImpersonationActive() for why a
@@ -46,7 +46,7 @@ export async function POST(
     }
 
     // Opportunistic cleanup — keeps this table down to live sessions only,
-    // never a growing history (no session logging, per Nancy's decision).
+    // never a growing history (no session logging, per admin's decision).
     await supabase
       .from('admin_impersonation_sessions')
       .delete()

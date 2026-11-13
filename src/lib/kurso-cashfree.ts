@@ -146,3 +146,14 @@ export async function refundKursoSubscriptionPayment(params: {
     refundStatus: json.refund_status || 'PENDING',
   }
 }
+/** Looks up an existing order (for Pay retries). Returns null if Cashfree has no such order. */
+export async function getKursoOrder(orderId: string): Promise<(KursoCashfreeOrder & { order_amount?: number }) | null> {
+  const { clientId, clientSecret } = credentials()
+  const res = await fetch(`${baseUrl()}/pg/orders/${encodeURIComponent(orderId)}`, {
+    headers: { 'x-client-id': clientId, 'x-client-secret': clientSecret, 'x-api-version': CF_API_VERSION },
+  })
+  if (res.status === 404) return null
+  const json = await res.json().catch(() => null)
+  if (!res.ok) throw new KursoCashfreeError(json?.message || `Cashfree order lookup failed (${res.status})`, res.status)
+  return json
+}

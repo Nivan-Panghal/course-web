@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createKursoSubscriptionOrder, KursoCashfreeError } from '@/lib/kurso-cashfree'
+import { createKursoSubscriptionOrder, getKursoOrder, KursoCashfreeError } from '@/lib/kurso-cashfree'
 import { friendlyErrorResponse } from '@/lib/payment-errors'
 import { isImpersonationActive, IMPERSONATION_BLOCK_MESSAGE } from '@/lib/impersonation-guard'
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const { data: invoice, error: invErr } = await supabase
       .from('revenue_share_invoices')
-      .select('id, creator_id, total_amount_due, status, period_start')
+            .select('id, creator_id, total_amount_due, status, period_start, gateway_order_id')
       .eq('id', invoiceId)
       .maybeSingle()
     if (invErr) throw invErr
@@ -50,8 +50,21 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     try {
+            // Retry safety: if an order already exists for this invoice, reuse it while it can still
+      // be paid. Cashfree refuses a repeated order_id, and a paid order must not be duplicated.
+      if (invoice.gateway_order_id) {
+        const existing = await getKursoOrder(invoice.gateway_order_id)
+        if (existing?.order_status === 'PAID') {
+          return NextResponse.json({ error: 'A payment for this invoice was already received and is being confirmed. Please check again in a few minutes.' }, { status: 409 })
+        }
+        if (existing?.order_status === 'ACTIVE' && Number(existing.order_amount) === Number(invoice.total_amount_due)) {
+          return NextResponse.json({ clientTxnId: invoice.id, orderId: existing.order_id, paymentSessionId: existing.payment_session_id, amount: invoice.total_amount_due })
+        }
+      }
+      // A previous order exists but is no longer usable: start a new one under a fresh id.
+      const orderId = invoice.gateway_order_id ? `${invoice.id}-${Date.now().toString(36)}` : invoice.id
       const order = await createKursoSubscriptionOrder({
-        orderId: invoice.id,
+                orderId,
         amount: invoice.total_amount_due,
         customerName: creator?.name || creator?.email || 'Creator',
         customerEmail: creator?.email || '',

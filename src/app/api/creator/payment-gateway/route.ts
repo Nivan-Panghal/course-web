@@ -94,6 +94,15 @@ export async function POST(req: NextRequest) {
         .eq('creator_id', creator.id)
     }
 
+    // Re-saving a gateway (e.g. rotating its key) must never silently drop its default flag.
+    const { data: existingRow } = await supabase
+      .from('creator_payment_gateways')
+      .select('is_default')
+      .eq('creator_id', creator.id)
+      .eq('provider', provider)
+      .maybeSingle()
+    const existingIsDefault = !!existingRow?.is_default
+
     const { error: upsertError } = await supabase.from('creator_payment_gateways').upsert(
       {
         creator_id: creator.id,
@@ -104,7 +113,7 @@ export async function POST(req: NextRequest) {
         status: 'verified',
         last_verification_error: null,
         verified_at: new Date().toISOString(),
-        is_default: setDefault,
+        is_default: setDefault || existingIsDefault,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'creator_id,provider' }

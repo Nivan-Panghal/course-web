@@ -240,6 +240,21 @@ async function handleStripe(rawBody: string, req: NextRequest) {
 
 // ── Shared dispatcher — routes to course vs ebook handler ─────────
 async function dispatchFlowA(transaction: any, body: NormalizedEvent, signature: string, provider: string) {
+    // Safety net: a verified payment for a DIFFERENT amount than the order we created is
+  // never auto-activated. It stays pending with a note, for manual reconciliation.
+  // Course purchases only; compared in rupees with 1 paisa tolerance.
+  if (
+    (transaction.product_type ?? 'course') === 'course' &&
+    transaction.status !== 'success' &&
+    body.status === 'success' &&
+    typeof body.amount === 'number' &&
+    Math.abs(body.amount - Number(transaction.amount)) > 0.01
+  ) {
+    const note = `Amount mismatch: order was ₹${Number(transaction.amount)}, ${provider} reported ₹${body.amount}`
+    await supabaseAdmin.from('transactions').update({ error_message: note }).eq('id', transaction.id)
+    await logWebhook({ provider, flow: 'flow_a', signature_valid: true, http_status_returned: 200, gateway_order_id: body.order_id, error_message: note })
+    return NextResponse.json({ received: true, message: 'Amount mismatch — not activated' })
+  }
   try {
     if (transaction.product_type === 'ebook') {
       return await handleFlowAEbook(transaction, body, signature, provider)

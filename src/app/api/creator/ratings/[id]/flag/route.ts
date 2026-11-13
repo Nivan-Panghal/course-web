@@ -3,7 +3,7 @@
  * Flags a rating for manual review — hides it from the public average
  * immediately, but keeps it stored and visible to the creator. There is
  * deliberately no unflag or delete endpoint: removal only happens if
- * Nancy manually confirms it's fake/abusive (no automated moderation
+ * creator manually confirms it's fake/abusive (no automated moderation
  * queue in this v1).
  */
 

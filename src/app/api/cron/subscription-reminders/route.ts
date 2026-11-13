@@ -203,7 +203,7 @@ export async function GET(req: NextRequest) {
  *    sales that month — unconditionally, regardless of course plan,
  *    since ebook selling is never gated behind any plan. Below the
  *    ₹500 monthly floor → 'not_due', same as zero course revenue.
- *    Kept as a SEPARATE invoice row (product_type) per Nancy's call —
+ *    Kept as a SEPARATE invoice row (product_type) 
  *    a creator can owe course commission, ebook commission, both, or
  *    neither in the same month, each tracked and paid independently.
  * 3. Sweep invoices that are still 'pending' REVENUE_SHARE_INVOICE_GRACE_DAYS
