@@ -4,7 +4,7 @@
  * Creator-side endpoints for the persistent Creator ↔ Admin chat
  * widget (src/components/CreatorAdminChatWidget.tsx).
  *
- * GET   → this creator's full message history with Nancy (admin).
+ * GET   → this creator's full message history with the admin.
  *         Rows older than 14 days are hard-deleted by the daily cron
  *         (/api/cron/creator-admin-chat-retention), so nothing here
  *         needs its own age filter.

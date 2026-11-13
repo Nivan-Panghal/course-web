@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Admin inbox list — every creator who has ever messaged (most
  * recent first, with an unread count), plus creators who haven't
- * messaged yet so Nancy can start a conversation herself. Gated by
+ * messaged yet so admin can start a conversation themselves. Gated by
  * requireAdmin() — same hardcoded-email check used everywhere else
  * admin-only in this app.
  * ─────────────────────────────────────────────────────────────────

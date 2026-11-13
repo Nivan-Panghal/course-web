@@ -1,6 +1,6 @@
 'use client'
 /**
- * Nancy's entry point into the impersonation panel. Lists creators;
+ * Admin's entry point into the impersonation panel. Lists creators;
  * "Log in as this creator" swaps her browser's Supabase session for a
  * genuine session for that creator's account — see
  * /api/admin/impersonate/[creatorId] for the mechanism and what stays

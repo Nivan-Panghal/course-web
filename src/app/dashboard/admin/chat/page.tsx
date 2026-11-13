@@ -2,8 +2,8 @@
 /**
  * src/app/dashboard/admin/chat/page.tsx
  * ─────────────────────────────────────────────────────────────────
- * Nancy's inbox for the Creator ↔ Admin chat widget. Lists every
- * creator conversation (most recent first, unread badge), lets her
+ * Admin's inbox for the Creator ↔ Admin chat widget. Lists every
+ * creator conversation (most recent first, unread badge), lets admin
  * open one and reply, or start a brand-new conversation with a
  * creator who hasn't messaged first. Gated server-side by
  * requireAdmin() on every API call — this page just shows "Not

@@ -2,10 +2,9 @@
  * src/app/api/admin/chat/[creatorId]/route.ts
  * ─────────────────────────────────────────────────────────────────
  * GET  → full message history with one creator, and marks every
- *        unread creator → admin message as read (Nancy has now
- *        opened this thread).
+ *        unread creator → admin message as read 
  * POST → admin sends a message to this creator — works even if no
- *        conversation exists yet (Nancy starting a new one).
+ *        conversation exists yet.
  * Gated by requireAdmin().
  * ─────────────────────────────────────────────────────────────────
  */
@@ -70,7 +69,7 @@ export async function POST(
       return NextResponse.json({ error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer` }, { status: 400 })
     }
 
-    // Confirm the creator actually exists before letting Nancy start a
+    // Confirm the creator actually exists before letting admin start a
     // brand-new thread with a bogus id.
     const { data: creatorRow } = await supabase.from('creators').select('id').eq('id', creatorId).maybeSingle()
     if (!creatorRow) return NextResponse.json({ error: 'Creator not found' }, { status: 404 })

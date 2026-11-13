@@ -168,6 +168,12 @@ export async function POST(req: NextRequest) {
       if (invoice.status === 'paid') {
         return NextResponse.json({ received: true, message: 'Already processed' })
       }
+            // Safety net: never mark an invoice paid (and re-open courses) for a different
+      // amount than was billed. It stays unpaid and is logged for manual reconciliation.
+      if (typeof amount === 'number' && Math.abs(amount - Number(invoice.total_amount_due)) > 0.01) {
+        await logWebhook({ provider: 'cashfree', flow: 'flow_b', signature_valid: true, http_status_returned: 200, gateway_order_id: orderId, error_message: `Amount mismatch: invoice is ₹${invoice.total_amount_due}, Cashfree reported ₹${amount}` })
+        return NextResponse.json({ received: true, message: 'Amount mismatch — not marked paid' })
+      }
 
            await supabaseAdmin.from('revenue_share_invoices').update({
         status: 'paid',

@@ -2,7 +2,7 @@
 /**
  * src/components/CreatorAdminChatWidget.tsx
  * ─────────────────────────────────────────────────────────────────
- * Persistent floating chat between a creator and Nancy/Nivan (Kurso admin).
+ * Persistent floating chat between a creator and Kurso admin.
  * Mounted once in src/app/dashboard/layout.tsx so it survives
  * navigation across every /dashboard/* page without unmounting.
  *

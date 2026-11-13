@@ -11,8 +11,7 @@
  *     students off-platform), external links, and spam patterns.
  *  2. AI toxicity pass — only runs on what survives stage 1, to control
  *     cost. Requires ANTHROPIC_API_KEY to be set; if it's not set, this
- *     stage is skipped and moderation relies on stage 1 alone. Ask
- *     Nancy to add ANTHROPIC_API_KEY to enable this stage.
+ *     stage is skipped and moderation relies on stage 1 alone.add ANTHROPIC_API_KEY to enable this stage.
  *
  * A flag from either stage means the comment is held as 'pending_review'
  * for the creator, NOT rejected outright — a false positive shouldn't

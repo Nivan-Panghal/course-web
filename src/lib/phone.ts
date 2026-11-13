@@ -12,7 +12,7 @@
  * intermittent "enrollment not found" / unique-constraint failures.
  *
  * Mirrors Whatsapp-bot/phone.js EXACTLY. That bot receives numbers from
- * Meta WITH the country code (e.g. "919306385029") and strips a leading
+ * Meta WITH the country code and strips a leading
  * Indian "91" before matching against `enrollments`/`students`. For that
  * match to ever succeed, this function must produce the identical bare
  * 10-digit form for Indian numbers. Non-Indian numbers are left with
@@ -40,7 +40,7 @@ export function normalizePhone(raw: string | null | undefined): string | null {
     // defensive: some clients prefix a leading 0 before the country code
     digits = digits.slice(3)
   } else if (digits.length === 11 && digits.startsWith('0')) {
-    // domestic dialing prefix, e.g. "09306385029"
+    
     digits = digits.slice(1)
   }
 

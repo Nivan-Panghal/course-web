@@ -3146,10 +3146,7 @@ export default function CourseManagePage({
 
     setCourse({ ...course, delivery: settingsDelivery })
 
-    // IMPORTANT:
-    // Existing students must retain their enrollment.delivery_method snapshot.
-    // This branch is intentionally kept for a future admin-controlled migration
-    // feature, but there its UI toggle is commented out whcih can't be uncommented until Nivan/nancy approve.
+    
 
     if (applyDeliveryToEnrolled) {
       const { error: enrollErr } = await supabase
@@ -3424,20 +3421,23 @@ export default function CourseManagePage({
     setDeletingModule(null)
   }
 
-  async function toggleCoursePublish() {
+    async function toggleCoursePublish() {
     if (!course) return
     const newState = !course.is_published
     // Only going draft → live needs an active plan; taking a live course
-    // back to draft is always allowed, no gate needed. No alert()/forced
-    // redirect here — the card above the toggle already explains this
-    // and links to /upgrade before the creator even tries to click.
+    // back to draft is always allowed, no gate needed.
     if (newState && !hasActivePaidPlan) {
       return
     }
-    await supabase
+    const { error } = await supabase
       .from('courses')
       .update({ is_published: newState })
       .eq('id', id)
+    if (error) {
+      // e.g. the database refuses to publish while a Kurso invoice is overdue
+      window.alert(error.message || 'Could not update this course. Please try again.')
+      return
+    }
     setCourse({ ...course, is_published: newState })
   }
 
@@ -3951,33 +3951,7 @@ export default function CourseManagePage({
                     disabled={savingDelivery}
                   />
 
-                  {/* this is the toggle for applying the delivery method to existing students. It is currently commented out, but you can uncomment it if you want to allow users to apply the delivery method to existing students.
-                  this is my (Nivan/Nancy) decision to keep it commented out for now.   */}
-                  {/* <label
-                    className="flex items-start gap-3 mt-5 p-4 rounded-xl cursor-pointer"
-                    style={{
-                      background: 'rgba(250,204,21,0.06)',
-                      border: '1px solid rgba(250,204,21,0.2)',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={applyDeliveryToEnrolled}
-                      onChange={e => setApplyDeliveryToEnrolled(e.target.checked)}
-                      className="mt-0.5"
-                    />
-
-                    <span className="text-xs" style={{ color: '#fde68a' }}>
-                      <span className="font-semibold block mb-1">
-                        Also apply to existing students
-                      </span>
-
-                      <span className="block">
-                        Existing students keep their current access either way.
-                      </span>
-                    </span>
-                  </label> */}
-
+                  
                   {deliveryError && (
                     <p className="text-xs mt-3 px-3 py-2 rounded-lg" style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>{deliveryError}</p>
                   )}

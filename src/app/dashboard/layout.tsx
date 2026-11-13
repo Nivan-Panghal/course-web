@@ -77,10 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div>
         {children}
       </div>
-      {/* Suppressed on Nancy's own admin pages — messaging herself there
-          would be pointless. Still shows on her other /dashboard/* pages
-          if she has her own creator profile, which is a known, low-stakes
-          gap (see handover notes). */}
+      
       {creator && !pathname?.startsWith('/dashboard/admin') && (
         <CreatorAdminChatWidget creatorId={creator.id} />
       )}
