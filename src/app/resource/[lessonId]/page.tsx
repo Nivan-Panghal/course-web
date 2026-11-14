@@ -137,7 +137,8 @@ export default function LessonResourcePage({
       let l: LessonResource | null = null
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        const res = await fetch(`/api/resource/lesson?lessonId=${lessonId}`, {
+        const signed = cameFromSignedLink ? `&${new URLSearchParams({ type, identity, exp, sig })}` : ''
+        const res = await fetch(`/api/resource/lesson?lessonId=${lessonId}${signed}`, {
           headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
         })
         if (res.ok) {
@@ -360,26 +361,26 @@ export default function LessonResourcePage({
             (ext === 'md' || ext === 'txt')
               ? <TextRenderer url={resourceUrl} name={resourceName} />
               : ext === 'pdf'
-              ? (
-                <div className="rounded-xl overflow-hidden border border-white/10">
-                  <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 text-sm text-zinc-300">
-                    <FileText className="w-4 h-4 text-violet-400" />
-                    {resourceName || type}
+                ? (
+                  <div className="rounded-xl overflow-hidden border border-white/10">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 text-sm text-zinc-300">
+                      <FileText className="w-4 h-4 text-violet-400" />
+                      {resourceName || type}
+                    </div>
+                    <iframe src={resourceUrl} title={resourceName || type} className="w-full h-[75vh] bg-zinc-950" />
                   </div>
-                  <iframe src={resourceUrl} title={resourceName || type} className="w-full h-[75vh] bg-zinc-950" />
-                </div>
-              )
-              : (
-                <div className="p-10 rounded-xl border border-white/10 text-center">
-                  <FileText className="w-10 h-10 text-violet-400 mx-auto mb-3" />
-                  <p className="text-white font-semibold mb-4">{resourceName || 'Resource file'}</p>
-                  <a href={resourceUrl} download
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-semibold"
-                    style={{ background: 'linear-gradient(135deg,var(--kurso-primary),var(--kurso-secondary))' }}>
-                    Download File
-                  </a>
-                </div>
-              )
+                )
+                : (
+                  <div className="p-10 rounded-xl border border-white/10 text-center">
+                    <FileText className="w-10 h-10 text-violet-400 mx-auto mb-3" />
+                    <p className="text-white font-semibold mb-4">{resourceName || 'Resource file'}</p>
+                    <a href={resourceUrl} download
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-semibold"
+                      style={{ background: 'linear-gradient(135deg,var(--kurso-primary),var(--kurso-secondary))' }}>
+                      Download File
+                    </a>
+                  </div>
+                )
           ) : (
             <div className="p-8 rounded-xl border border-white/10 bg-white/[0.03] text-center text-zinc-400">
               No {type} available for this lesson yet.

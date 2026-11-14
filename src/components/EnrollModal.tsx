@@ -337,7 +337,7 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
   const [error, setError] = useState('')
   const [checkoutOrder, setCheckoutOrder] = useState<any>(null)
   const [checkingStatus, setCheckingStatus] = useState(false)
-    const [checkingAuth, setCheckingAuth] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   // Theme colors of the landing page this popup was opened from (null elsewhere).
   const brandVars = useBrandVars()
 
@@ -740,9 +740,13 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
     setLoading(true)
     setError('')
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/free-enroll', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({
           courseId: course.id,
           studentId: studentData?.id || null,
@@ -942,7 +946,7 @@ export default function EnrollModal({ onClose, course, resumeOrderId }: Props) {
             </h2>
             <p className="text-xs mt-0.5" style={{ color: '#52525b' }}>{course.name}</p>
           </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
             {/* Only on the first step and while nothing is submitting — leaving
                 mid-payment or mid-signup would drop the student's progress. */}
             {step === 'auth' && !loading && course.moreCoursesSlug && (

@@ -83,6 +83,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
     }
 
+        // Only a PAID enrollment may record progress. A refunded or never-paid one must not
+    // finish the course or earn a certificate.
+    if (enrollment.payment_status !== 'paid') {
+      return NextResponse.json({ error: 'Enrollment is not active' }, { status: 403 })
+    }
+
     if (webAccess) {
       if (
         webAccess.courseId !== courseId ||
