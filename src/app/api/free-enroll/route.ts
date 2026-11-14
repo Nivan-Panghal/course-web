@@ -73,37 +73,67 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'This course is not free' }, { status: 400 });
     }
 
+        // Who is really calling? Only a valid login token proves "I am this student".
+    // The studentId / email / phone in the body are just claims: they must never let a
+    // caller change or take over somebody else's student record.
+    const bearer = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    let loginUser: any = null;
+    if (bearer) {
+      const { data: u } = await supabaseAdmin.auth.getUser(bearer);
+      loginUser = u?.user ?? null;
+    }
+    const trustedAuthId: string | null =
+      loginUser && studentId && loginUser.id === studentId ? loginUser.id : null;
+    const emailKey = studentEmail ? String(studentEmail).trim() : null;
+
     // Upsert student
     let student: any = null;
-    if (studentId) {
+    let isOwnerCall = false; // true only when the caller is logged in as this very student
+    if (trustedAuthId) {
       student = await firstRow(
-        supabaseAdmin.from('students').select('id').eq('auth_id', studentId)
+        supabaseAdmin.from('students').select('id').eq('auth_id', trustedAuthId)
       );
+      isOwnerCall = !!student;
     }
-    if (!student && studentEmail) {
+    if (!student && emailKey) {
       student = await firstRow(
-        supabaseAdmin.from('students').select('id').eq('email', studentEmail)
+        supabaseAdmin
+          .from('students')
+          .select('id, auth_id')
+          .ilike('email', emailKey.replace(/[\\%_]/g, '\\$&'))
       );
+      // A logged-in user with the same verified email may claim a student row that has
+      // no login yet (for example one created earlier through WhatsApp).
+      if (
+        student && !student.auth_id && trustedAuthId &&
+        loginUser?.email?.toLowerCase() === emailKey.toLowerCase()
+      ) {
+        isOwnerCall = true;
+      }
     }
 
     if (student) {
-      await supabaseAdmin
-        .from('students')
-        .update({
-          email: studentEmail || undefined,
-          name: studentName || undefined,
-          phone: studentPhone || undefined,
-          auth_id: studentId || undefined,
-        })
-        .eq('id', student.id);
+      // Only the logged-in owner may change their own details.
+      // Anonymous callers just enrol: the existing student is left exactly as it is.
+      if (isOwnerCall) {
+        await supabaseAdmin
+          .from('students')
+          .update({
+            email: studentEmail || undefined,
+            name: studentName || undefined,
+            phone: studentPhone || undefined,
+            auth_id: trustedAuthId || undefined,
+          })
+          .eq('id', student.id);
+      }
     } else {
       const { data: inserted, error: insertErr } = await supabaseAdmin
         .from('students')
         .insert({
-          email: studentEmail || null,
+          email: emailKey,
           name: studentName || null,
           phone: studentPhone || null,
-          auth_id: studentId || null,
+          auth_id: trustedAuthId,
         })
         .select('id')
         .single();

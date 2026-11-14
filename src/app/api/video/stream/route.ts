@@ -32,26 +32,52 @@ const RATE_WINDOW_SECONDS = 60   // 1 minute
 const RATE_MAX = 40              // max chunk requests per minute per identity+lesson
 
 async function isRateLimited(key: string): Promise<boolean> {
-  const rateLimitKey = `videoratelimit:${key}`
-  const count = await redis.incr(rateLimitKey)
-  if (count === 1) {
-    // First hit in this window — set the window to expire in 60s.
-    await redis.expire(rateLimitKey, RATE_WINDOW_SECONDS)
+  try {
+    const rateLimitKey = `videoratelimit:${key}`
+    const count = await redis.incr(rateLimitKey)
+    if (count === 1) {
+      // First hit in this window — set the window to expire in 60s.
+      await redis.expire(rateLimitKey, RATE_WINDOW_SECONDS)
+    }
+    return count > RATE_MAX
+  } catch (e) {
+    // If Redis is down, keep videos playing (enrollment is still checked below).
+    console.error('[video/stream] rate limiter unavailable', e)
+    return false
   }
-  return count > RATE_MAX
 }
 
-// ── Enrollment result cache (avoids 5 DB queries on every range request) ──
-// Also Redis-backed now, for the same cross-instance-consistency reason.
-const ENROLLMENT_CACHE_TTL_SECONDS = 5 * 60   // 5 minutes
+// ── Enrollment cache (avoids 5 DB queries on every range request) ──
+// A cached value is 'free' (the lesson is free) or 'enr:<id>' (a student's PAID enrollment).
+// 'enr:' hits are re-checked against that one enrollment row, so a refund works at once.
+// Denials are never cached, so a student who just paid is let in at once.
+const ENROLLMENT_CACHE_TTL_SECONDS = 5 * 60
 
-async function getCachedEnrollment(key: string): Promise<boolean | null> {
-  const value = await redis.get<boolean>(`enrollcache:${key}`)
-  return value === null || value === undefined ? null : value
+async function getCachedEnrollment(key: string): Promise<string | null> {
+  try {
+    const value = await redis.get<string>(`enrollcache:${key}`)
+    return typeof value === 'string' ? value : null
+  } catch (e) {
+    console.error('[video/stream] cache read failed', e)
+    return null
+  }
+}
+
+async function cacheValue(key: string, value: string): Promise<void> {
+  try {
+    await redis.set(`enrollcache:${key}`, value, { ex: ENROLLMENT_CACHE_TTL_SECONDS })
+  } catch (e) {
+    console.error('[video/stream] cache write failed', e)
+  }
 }
 
 async function setCachedEnrollment(key: string, result: boolean): Promise<void> {
-  await redis.set(`enrollcache:${key}`, result, { ex: ENROLLMENT_CACHE_TTL_SECONDS })
+  if (result !== true) return // never cache a "no"
+  await cacheValue(key, 'free')
+}
+
+async function rememberPaid(key: string, enrollmentId: string): Promise<void> {
+  await cacheValue(key, `enr:${enrollmentId}`)
 }
 
 async function verifyEnrollment(
@@ -61,7 +87,17 @@ async function verifyEnrollment(
 ): Promise<boolean> {
   const cacheKey = `${lessonId}:${identity}`
   const cached = await getCachedEnrollment(cacheKey)
-  if (cached !== null) return cached
+  if (cached === 'free') return true
+  if (cached && cached.startsWith('enr:')) {
+    // One cheap lookup by id, so a refund takes effect on the very next request.
+    const { data: still } = await supabase
+      .from('enrollments')
+      .select('payment_status')
+      .eq('id', cached.slice(4))
+      .maybeSingle()
+    if (still?.payment_status === 'paid') return true
+    // otherwise fall through to the full check below
+  }
 
   const { data: lesson } = await supabase
     .from('lessons')
@@ -84,13 +120,13 @@ async function verifyEnrollment(
   if (isFree) { await setCachedEnrollment(cacheKey, true); return true }
 
   if (identity === 'web') {
-  const webAccess = req ? await getWebAccessContext(req) : null
+    const webAccess = req ? await getWebAccessContext(req) : null
 
-  const allowed = webAccess?.courseId === lesson.course_id
+    const allowed = webAccess?.courseId === lesson.course_id
 
-  await setCachedEnrollment(cacheKey, allowed)
-  return allowed
-}
+    // not cached: this depends on the caller's own cookie
+    return allowed
+  }
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identity)
 
@@ -112,7 +148,7 @@ async function verifyEnrollment(
         .limit(1)
         .single()
 
-      if (enrollment) { await setCachedEnrollment(cacheKey, true); return true }
+      if (enrollment) { await rememberPaid(cacheKey, enrollment.id); return true }
     }
 
     if (student) {
@@ -130,7 +166,7 @@ async function verifyEnrollment(
           .limit(1)
           .single()
 
-        if (enrollment) { await setCachedEnrollment(cacheKey, true); return true }
+        if (enrollment) { await rememberPaid(cacheKey, enrollment.id); return true }
       }
     }
 
@@ -151,7 +187,7 @@ async function verifyEnrollment(
             .limit(1)
             .single()
 
-          if (enrollment) { await setCachedEnrollment(cacheKey, true); return true }
+          if (enrollment) { await rememberPaid(cacheKey, enrollment.id); return true }
         }
       }
     } catch (e) {
@@ -172,14 +208,14 @@ async function verifyEnrollment(
 
   const { data: enrollment } = await supabase
     .from('enrollments')
-    .select('payment_status')
+    .select('id, payment_status')
     .eq('course_uuid', lesson.course_id)
     .or(`phone.eq.${identity},telegram_chat_id.eq.${identity}`)
     .limit(1)
     .single()
 
   if (enrollment && enrollment.payment_status === 'paid') {
-    await setCachedEnrollment(cacheKey, true)
+    await rememberPaid(cacheKey, enrollment.id)
     return true
   }
 
@@ -211,7 +247,7 @@ async function getStorageUrl(lessonId: string): Promise<string | null> {
     return null
   }
 
-    const path = lesson.video_storage_path
+  const path = lesson.video_storage_path
   console.error('[video/stream] resolving', lessonId, '| video_storage_path:', path, '| content_url:', lesson.content_url)
 
   if (path && !path.startsWith('http')) {
@@ -238,7 +274,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse('Link expired or invalid', { status: 401 })
   }
 
-    // 2. Rate limit
+  // 2. Rate limit
   if (await isRateLimited(`${lessonId}:${identity}`)) {
     return new NextResponse('Too many requests', { status: 429 })
   }

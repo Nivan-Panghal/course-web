@@ -35,6 +35,15 @@ const SENSITIVE_COLUMNS = [
   'live_recording_url',
 ]
 
+// Study materials: hidden in the preview for paid lessons (free lessons stay visible).
+const MATERIAL_COLUMNS = [
+  'summary_url',
+  'summary_name',
+  'notes_url',
+  'notes_name',
+  'assignment_file_url',
+]
+
 async function hasPaidEnrollment(courseId: string, user: any): Promise<boolean> {
   // 1. By the student record linked to this login
   const { data: student } = await supabase
@@ -156,6 +165,10 @@ export async function GET(req: NextRequest) {
       if (fullAccess) return l
       const safe: Record<string, any> = { ...l }
       for (const col of SENSITIVE_COLUMNS) safe[col] = null
+      if (l.is_free !== true) {
+        for (const col of MATERIAL_COLUMNS) safe[col] = null
+        safe.quiz_questions = []
+      }
       safe.content_url = '' // this field is typed as a plain string in the page
       return safe
     })
