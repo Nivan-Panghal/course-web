@@ -1,7 +1,7 @@
 // src/app/api/workshops/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, isValidPhone } from '@/lib/phone'
 import { friendlyErrorResponse } from '@/lib/payment-errors'
 import { countHeldSpots, getWorkshopRegistrationState, registrationClosedMessage } from '@/lib/workshops'
 import { notifyWorkshopConfirmed } from '@/lib/workshop-notify'
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const phone = normalizePhone(rawPhone)
-    if (!phone) {
+    if (!isValidPhone(phone)) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
@@ -55,17 +55,20 @@ export async function POST(req: NextRequest) {
 
     const { data: existing } = await supabaseAdmin
       .from('workshop_registrations')
-      .select('id, payment_status, payment_mode, telegram_link_token, referred_by_code_id')
+      .select('id, payment_status, payment_mode, telegram_link_token, referred_by_code_id, refunded_at')
       .eq('workshop_id', workshopId)
       .eq('phone', phone)
       .maybeSingle()
 
+    // A refunded attendee gave their seat back: never show them a false "you're registered".
+    if (existing?.refunded_at) {
+      return NextResponse.json({ error: 'This registration was refunded. Please contact the host if you would like to join again.' }, { status: 409 })
+    }
     // Already confirmed — never re-insert or reset.
     if (existing?.payment_status === 'confirmed') {
       return NextResponse.json({
         registrationId: existing.id,
         paymentStatus: 'confirmed',
-        telegramToken: existing.telegram_link_token,
         alreadyRegistered: true,
       })
     }
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
 
     const paymentStatus = paymentMode === 'free' ? 'confirmed' : 'pending_confirmation'
     let registrationId: string
-    let telegramToken: string
+    let telegramToken: string | undefined
 
     if (existing) {
       const { error: updateError } = await supabaseAdmin
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
         .eq('id', existing.id)
       if (updateError) throw updateError
       registrationId = existing.id
-      telegramToken = existing.telegram_link_token
+      telegramToken = undefined // never hand a stored token to whoever knows the phone number
     } else {
       const { data: inserted, error: insertError } = await supabaseAdmin
         .from('workshop_registrations')

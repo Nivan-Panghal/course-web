@@ -242,9 +242,9 @@ async function handleStripe(rawBody: string, req: NextRequest) {
 async function dispatchFlowA(transaction: any, body: NormalizedEvent, signature: string, provider: string) {
     // Safety net: a verified payment for a DIFFERENT amount than the order we created is
   // never auto-activated. It stays pending with a note, for manual reconciliation.
-  // Course purchases only; compared in rupees with 1 paisa tolerance.
+  // Courses, ebooks and webinars alike; compared in rupees with 1 paisa tolerance.
   if (
-    (transaction.product_type ?? 'course') === 'course' &&
+    
     transaction.status !== 'success' &&
     body.status === 'success' &&
     typeof body.amount === 'number' &&
@@ -476,7 +476,7 @@ return NextResponse.json({ received: true, message: 'Enrollment activated' })
 
 // ── Flow A: ebook purchase ───────────────────────────────────────
 async function handleFlowAEbook(transaction: any, body: NormalizedEvent, signature: string, provider: string) {
-  if (transaction.status === 'success') return NextResponse.json({ received: true, message: 'Already processed' })
+  if (transaction.status === 'success' || transaction.status === 'refunded') return NextResponse.json({ received: true, message: 'Already processed' })
   if (body.status === 'failed' || body.status === 'expired') {
     await supabaseAdmin.from('transactions').update({ status: body.status }).eq('id', transaction.id)
     return NextResponse.json({ received: true, message: `Marked ${body.status}` })

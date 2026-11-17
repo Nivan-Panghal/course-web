@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { getCreatorCheckoutGateway, createCheckoutOrder, CheckoutOrderError } from '@/lib/gateway-checkout'
 import { friendlyErrorResponse } from '@/lib/payment-errors'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, isValidPhone } from '@/lib/phone'
 import { GATEWAY_HOLD_MINUTES, countHeldSpots, getWorkshopRegistrationState, registrationClosedMessage } from '@/lib/workshops'
 import { resolveReferralCodeId } from '@/lib/referrals'
 import { scheduleWorkshopMetaEvent, getMetaRequestContext, leadEventId } from '@/lib/workshop-meta-events'
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email is required for online payment.' }, { status: 400 })
     }
     const phone = normalizePhone(rawPhone)
-    if (!phone) {
+    if (!isValidPhone(phone)) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
@@ -103,16 +103,19 @@ export async function POST(req: NextRequest) {
     // Existing registration for this phone?
     const { data: existing } = await supabase
       .from('workshop_registrations')
-      .select('id, payment_status, telegram_link_token, referred_by_code_id')
+      .select('id, payment_status, telegram_link_token, referred_by_code_id, refunded_at')
       .eq('workshop_id', workshopId)
       .eq('phone', phone)
       .maybeSingle()
+
+    if (existing?.refunded_at) {
+      return NextResponse.json({ error: 'This registration was refunded. Please contact the host if you would like to join again.' }, { status: 409 })
+    }
 
     if (existing?.payment_status === 'confirmed') {
       return NextResponse.json({
         alreadyRegistered: true,
         registrationId: existing.id,
-        telegramToken: existing.telegram_link_token,
       })
     }
 
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString()
     let registrationId: string
-    let telegramToken: string
+    let telegramToken: string | undefined
 
     if (existing) {
       const { error: updateError } = await supabase
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
         .eq('id', existing.id)
       if (updateError) throw updateError
       registrationId = existing.id
-      telegramToken = existing.telegram_link_token
+      telegramToken = undefined
     } else {
       const { data: inserted, error: insertError } = await supabase
         .from('workshop_registrations')
@@ -224,7 +227,7 @@ export async function POST(req: NextRequest) {
         customerName: name.trim(),
         customerEmail: email.trim(),
         customerPhone: phone,
-        returnUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/w/${creator.creator_slug}/${workshop.slug}?order_id=${transactionId}&tg=${telegramToken}`,
+        returnUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/w/${creator.creator_slug}/${workshop.slug}?order_id=${transactionId}${telegramToken ? `&tg=${telegramToken}` : ''}`,
       })
 
       // Stripe has no orderId — it's correlated by client_reference_id

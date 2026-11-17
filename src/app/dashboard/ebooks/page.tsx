@@ -27,6 +27,7 @@ export default function EbooksPage() {
   const [resettingId, setResettingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Ebook | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [publishError, setPublishError] = useState('')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -81,14 +82,17 @@ export default function EbooksPage() {
   }
 
   async function togglePublish(ebook: Ebook) {
-    await supabase.from('ebooks').update({ is_published: !ebook.is_published }).eq('id', ebook.id)
+    setPublishError('')
+    const { error } = await supabase.from('ebooks').update({ is_published: !ebook.is_published }).eq('id', ebook.id)
+    // e.g. "Your Kurso invoice is overdue. Pay it to publish again."
+    if (error) setPublishError(error.message)
     fetchEbooks()
   }
 
-    async function deleteEbook(ebookId: string) {
+  async function deleteEbook(ebookId: string) {
     await supabase.from('ebooks').delete().eq('id', ebookId)
     if (selectedId === ebookId) setSelectedId('')
-       fetchEbooks()
+    fetchEbooks()
     setDeleteTarget(null)
   }
 
@@ -98,8 +102,8 @@ export default function EbooksPage() {
     setTimeout(() => setCopiedId(prev => (prev === eb.id ? null : prev)), 2000)
   }
 
- 
-    async function handleCreate(e: React.SyntheticEvent<HTMLFormElement>) {
+
+  async function handleCreate(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     setCreateError(''); setCreateSuccess('')
     if (!title.trim() || !price || !pdfFile) { setCreateError('Title, price, and a PDF file are required.'); return }
@@ -158,7 +162,7 @@ export default function EbooksPage() {
 
   return (
     <div className="min-h-screen flex" style={{ background: '#050505' }}>
-            <Sidebar />
+      <Sidebar />
       {deleteTarget && (
         <DeleteEbookModal
           ebook={deleteTarget}
@@ -167,177 +171,178 @@ export default function EbooksPage() {
         />
       )}
       <main className="md:ml-56 p-5 md:p-8 pt-20 md:pt-8 font-sans w-full flex flex-col items-center">
-      <div className="w-full max-w-3xl">
-        <div className="text-center mb-10 mt-4">
-          <h1 className="text-3xl font-extrabold tracking-tight text-white mb-2">Ebooks</h1>
-          <p className="text-base" style={{ color: 'var(--kurso-text-secondary)' }}>
-            Sell PDF ebooks separately from your courses.
-          </p>
-        </div>
+        <div className="w-full max-w-3xl">
+          <div className="text-center mb-10 mt-4">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white mb-2">Ebooks</h1>
+            <p className="text-base" style={{ color: 'var(--kurso-text-secondary)' }}>
+              Sell PDF ebooks separately from your courses.
+            </p>
+          </div>
 
-        {/* Tabs */}
-        <div className="flex items-center justify-center gap-2 mb-10">
-          {(['dashboard', 'create'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className="px-6 py-3 rounded-xl text-sm font-bold capitalize transition-all"
-              style={{
-                background: tab === t ? 'rgba(var(--kurso-primary-rgb), 0.15)' : 'rgba(255,255,255,0.03)',
-                color: tab === t ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)',
-                border: tab === t ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)',
-              }}>
-              {t}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center"><div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" /></div>
-        ) : tab === 'dashboard' ? (
-          ebooks.length === 0 ? (
-            <div className="mx-auto max-w-md text-center rounded-2xl py-16 px-8"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                style={{ background: 'rgba(var(--kurso-primary-rgb), 0.1)' }}>
-                <BookOpen className="w-7 h-7" style={{ color: 'var(--kurso-primary-light)' }} />
-              </div>
-              <p className="text-base mb-6" style={{ color: 'var(--kurso-text-muted)' }}>You haven't added any ebooks yet.</p>
-              <button onClick={() => setTab('create')} className="px-6 py-3 rounded-xl text-sm font-bold text-white violet-gradient">
-                Add your first ebook
+          {/* Tabs */}
+          <div className="flex items-center justify-center gap-2 mb-10">
+            {(['dashboard', 'create'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className="px-6 py-3 rounded-xl text-sm font-bold capitalize transition-all"
+                style={{
+                  background: tab === t ? 'rgba(var(--kurso-primary-rgb), 0.15)' : 'rgba(255,255,255,0.03)',
+                  color: tab === t ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)',
+                  border: tab === t ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)',
+                }}>
+                {t}
               </button>
-            </div>
-          ) : (
-            <>
-              {/* Ebook selector */}
-              <div className="flex gap-2 mb-8 flex-wrap justify-center">
-                <button onClick={() => setSelectedId('')}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                  style={{ background: selectedId === '' ? 'rgba(var(--kurso-primary-rgb),0.15)' : 'rgba(255,255,255,0.04)', color: selectedId === '' ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)', border: selectedId === '' ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
-                  All ebooks
-                </button>
-                {ebooks.map(eb => (
-                  <button key={eb.id} onClick={() => setSelectedId(eb.id)}
-                    className="px-4 py-2.5 rounded-xl text-sm font-semibold truncate max-w-[200px] transition-all"
-                    style={{ background: selectedId === eb.id ? 'rgba(var(--kurso-primary-rgb),0.15)' : 'rgba(255,255,255,0.04)', color: selectedId === eb.id ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)', border: selectedId === eb.id ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
-                    {eb.title}
-                  </button>
-                ))}
-              </div>
+            ))}
+          </div>
 
-              {/* Stats — centered, bigger */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-                <StatCard icon={Users} label="Buyers" value={stats.buyers} color="var(--kurso-info)" />
-                <StatCard icon={IndianRupee} label="Revenue" value={`₹${stats.totalRevenue.toLocaleString('en-IN')}`} color="var(--kurso-success)" />
-                <StatCard icon={IndianRupee} label="This month" value={`₹${stats.thisMonthRevenue.toLocaleString('en-IN')}`} color="var(--kurso-success)" />
-                <StatCard icon={Download} label="Downloads" value={stats.totalDownloads} color="var(--kurso-purple)" />
-              </div>
-
-              {/* Buyers + reset — only when one ebook is selected */}
-              {selectedId && buyers.length > 0 && (
-                <div className="mb-10">
-                  <p className="text-base font-bold text-white mb-4 text-center">Buyers</p>
-                  <div className="flex flex-col gap-3 max-w-2xl mx-auto">
-                    {buyers.map(b => (
-                      <div key={b.id} className="flex items-center gap-4 p-4 rounded-xl"
-                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{b.student_name || b.student_email || 'Reader'}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--kurso-text-muted)' }}>
-                            ₹{Number(b.amount).toLocaleString('en-IN')} · {b.status === 'refunded' ? 'Refunded' : `${b.ebook_download_count}/${b.ebook_download_limit} downloads used`}
-                          </p>
-                        </div>
-                        {b.status !== 'refunded' && b.ebook_download_count >= b.ebook_download_limit && (
-                          <button onClick={() => resetDownloads(b.id)} disabled={resettingId === b.id}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold flex-shrink-0 disabled:opacity-50"
-                            style={{ background: 'rgba(var(--kurso-info),0.1)',  color: 'var(--kurso-info)', border: '1px solid rgba(56,189,248,0.2)' }}>
-                            <RotateCcw className="w-3 h-3" /> {resettingId === b.id ? 'Resetting...' : 'Reset downloads'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+          {loading ? (
+            <div className="flex justify-center"><div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" /></div>
+          ) : tab === 'dashboard' ? (
+            ebooks.length === 0 ? (
+              <div className="mx-auto max-w-md text-center rounded-2xl py-16 px-8"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                  style={{ background: 'rgba(var(--kurso-primary-rgb), 0.1)' }}>
+                  <BookOpen className="w-7 h-7" style={{ color: 'var(--kurso-primary-light)' }} />
                 </div>
-              )}
-
-              {/* Ebook list */}
-              <p className="text-base font-bold text-white mb-4 text-center">Your ebooks</p>
-              <div className="flex flex-col gap-3 max-w-2xl mx-auto">
-                {ebooks.map(eb => (
-                  <div key={eb.id} className="flex items-center gap-4 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div className="w-12 h-14 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      {eb.cover_image_url ? <img src={eb.cover_image_url} alt="" className="w-full h-full object-cover" /> : <BookOpen className="w-5 h-5" style={{ color: '#3f3f46' }} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{eb.title}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--kurso-text-muted)' }}>
-                        ₹{Number(eb.price).toLocaleString('en-IN')} · {eb.is_published ? 'Live' : 'Draft'}
-                      </p>
-                    </div>
-                                                            <button onClick={() => copyEbookLink(eb)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
-                      style={{
-                        background: copiedId === eb.id ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.05)',
-                        color: copiedId === eb.id ? '#4ade80' : '#a1a1aa',
-                        border: copiedId === eb.id ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(255,255,255,0.08)',
-                      }}>
-                      {copiedId === eb.id ? <><Check className="w-3 h-3" />Copied!</> : <><Copy className="w-3 h-3" />Copy link</>}
-                    </button>
-                    <button onClick={() => togglePublish(eb)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
-                      style={{
-                        background: eb.is_published ? 'rgba(239,68,68,0.1)' : 'rgba(74,222,128,0.1)',
-                        color: eb.is_published ? '#ef4444' : '#4ade80',
-                        border: eb.is_published ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(74,222,128,0.2)',
-                      }}>
-                      {eb.is_published
-                        ? <><EyeOff className="w-3 h-3" />Unpublish</>
-                        : <><Eye className="w-3 h-3" />Publish</>
-                      }
-                    </button>
-                    <button onClick={() => setDeleteTarget(eb)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
-                      style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
-                      <Trash2 className="w-3 h-3" /> Delete
-                    </button>
-                  </div>
-                ))}
+                <p className="text-base mb-6" style={{ color: 'var(--kurso-text-muted)' }}>You haven't added any ebooks yet.</p>
+                <button onClick={() => setTab('create')} className="px-6 py-3 rounded-xl text-sm font-bold text-white violet-gradient">
+                  Add your first ebook
+                </button>
               </div>
-            </>
-          )
-        ) : (
-          <form onSubmit={handleCreate} className="flex flex-col gap-5 max-w-lg mx-auto">
-            <div>
-              <label className="text-sm font-semibold text-white mb-2 block">Title</label>
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. The Freelancer's Pricing Guide"
-                className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-white mb-2 block">Description <span style={{ color: 'var(--kurso-text-muted)', fontWeight: 400 }}>(optional)</span></label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-                className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none resize-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-white mb-2 block">Price (₹)</label>
-              <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="1" placeholder="299"
-                className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
-            </div>
+            ) : (
+              <>
+                {/* Ebook selector */}
+                <div className="flex gap-2 mb-8 flex-wrap justify-center">
+                  <button onClick={() => setSelectedId('')}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                    style={{ background: selectedId === '' ? 'rgba(var(--kurso-primary-rgb),0.15)' : 'rgba(255,255,255,0.04)', color: selectedId === '' ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)', border: selectedId === '' ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                    All ebooks
+                  </button>
+                  {ebooks.map(eb => (
+                    <button key={eb.id} onClick={() => setSelectedId(eb.id)}
+                      className="px-4 py-2.5 rounded-xl text-sm font-semibold truncate max-w-[200px] transition-all"
+                      style={{ background: selectedId === eb.id ? 'rgba(var(--kurso-primary-rgb),0.15)' : 'rgba(255,255,255,0.04)', color: selectedId === eb.id ? 'var(--kurso-primary-light)' : 'var(--kurso-text-muted)', border: selectedId === eb.id ? '1px solid rgba(var(--kurso-primary-rgb), 0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                      {eb.title}
+                    </button>
+                  ))}
+                </div>
 
-            <FileUploadField label="Cover image" accept="image/*" file={coverFile} onChange={setCoverFile} icon={ImageIcon}
-              hint="Optional — shown on the storefront page." />
+                {/* Stats — centered, bigger */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+                  <StatCard icon={Users} label="Buyers" value={stats.buyers} color="var(--kurso-info)" />
+                  <StatCard icon={IndianRupee} label="Revenue" value={`₹${stats.totalRevenue.toLocaleString('en-IN')}`} color="var(--kurso-success)" />
+                  <StatCard icon={IndianRupee} label="This month" value={`₹${stats.thisMonthRevenue.toLocaleString('en-IN')}`} color="var(--kurso-success)" />
+                  <StatCard icon={Download} label="Downloads" value={stats.totalDownloads} color="var(--kurso-purple)" />
+                </div>
 
-            <FileUploadField label="PDF file" accept="application/pdf" file={pdfFile} onChange={setPdfFile} icon={FileText}
-              hint="Every download gets your buyer's name stamped into it automatically — nothing extra for you to do." />
+                {/* Buyers + reset — only when one ebook is selected */}
+                {selectedId && buyers.length > 0 && (
+                  <div className="mb-10">
+                    <p className="text-base font-bold text-white mb-4 text-center">Buyers</p>
+                    <div className="flex flex-col gap-3 max-w-2xl mx-auto">
+                      {buyers.map(b => (
+                        <div key={b.id} className="flex items-center gap-4 p-4 rounded-xl"
+                          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{b.student_name || b.student_email || 'Reader'}</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--kurso-text-muted)' }}>
+                              ₹{Number(b.amount).toLocaleString('en-IN')} · {b.status === 'refunded' ? 'Refunded' : `${b.ebook_download_count}/${b.ebook_download_limit} downloads used`}
+                            </p>
+                          </div>
+                          {b.status !== 'refunded' && b.ebook_download_count >= b.ebook_download_limit && (
+                            <button onClick={() => resetDownloads(b.id)} disabled={resettingId === b.id}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold flex-shrink-0 disabled:opacity-50"
+                              style={{ background: 'rgba(var(--kurso-info),0.1)', color: 'var(--kurso-info)', border: '1px solid rgba(56,189,248,0.2)' }}>
+                              <RotateCcw className="w-3 h-3" /> {resettingId === b.id ? 'Resetting...' : 'Reset downloads'}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {createError && <p className="text-sm text-center" style={{ color: '#ef4444' }}>{createError}</p>}
-            {createSuccess && <p className="text-sm text-center" style={{ color: 'var(--kurso-success)' }}>{createSuccess}</p>}
+                {/* Ebook list */}
+                <p className="text-base font-bold text-white mb-4 text-center">Your ebooks</p>
+                {publishError && <p className="text-sm text-center mb-3" style={{ color: '#ef4444' }}>{publishError}</p>}
+                <div className="flex flex-col gap-3 max-w-2xl mx-auto">
+                  {ebooks.map(eb => (
+                    <div key={eb.id} className="flex items-center gap-4 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="w-12 h-14 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        {eb.cover_image_url ? <img src={eb.cover_image_url} alt="" className="w-full h-full object-cover" /> : <BookOpen className="w-5 h-5" style={{ color: '#3f3f46' }} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{eb.title}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--kurso-text-muted)' }}>
+                          ₹{Number(eb.price).toLocaleString('en-IN')} · {eb.is_published ? 'Live' : 'Draft'}
+                        </p>
+                      </div>
+                      <button onClick={() => copyEbookLink(eb)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
+                        style={{
+                          background: copiedId === eb.id ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.05)',
+                          color: copiedId === eb.id ? '#4ade80' : '#a1a1aa',
+                          border: copiedId === eb.id ? '1px solid rgba(74,222,128,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                        }}>
+                        {copiedId === eb.id ? <><Check className="w-3 h-3" />Copied!</> : <><Copy className="w-3 h-3" />Copy link</>}
+                      </button>
+                      <button onClick={() => togglePublish(eb)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
+                        style={{
+                          background: eb.is_published ? 'rgba(239,68,68,0.1)' : 'rgba(74,222,128,0.1)',
+                          color: eb.is_published ? '#ef4444' : '#4ade80',
+                          border: eb.is_published ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(74,222,128,0.2)',
+                        }}>
+                        {eb.is_published
+                          ? <><EyeOff className="w-3 h-3" />Unpublish</>
+                          : <><Eye className="w-3 h-3" />Publish</>
+                        }
+                      </button>
+                      <button onClick={() => setDeleteTarget(eb)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
+                        style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )
+          ) : (
+            <form onSubmit={handleCreate} className="flex flex-col gap-5 max-w-lg mx-auto">
+              <div>
+                <label className="text-sm font-semibold text-white mb-2 block">Title</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. The Freelancer's Pricing Guide"
+                  className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-white mb-2 block">Description <span style={{ color: 'var(--kurso-text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+                  className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none resize-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-white mb-2 block">Price (₹)</label>
+                <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="1" placeholder="299"
+                  className="w-full px-4 py-3.5 rounded-xl text-base text-white outline-none" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+              </div>
 
-            <button type="submit" disabled={uploading}
-              className="py-4 rounded-xl text-base font-bold text-white violet-gradient disabled:opacity-50 flex items-center justify-center gap-2">
-              <Upload className="w-5 h-5" />
-              {uploading ? 'Uploading...' : 'Add Ebook'}
-            </button>
-          </form>
-        )}
-      </div>
+              <FileUploadField label="Cover image" accept="image/*" file={coverFile} onChange={setCoverFile} icon={ImageIcon}
+                hint="Optional — shown on the storefront page." />
+
+              <FileUploadField label="PDF file" accept="application/pdf" file={pdfFile} onChange={setPdfFile} icon={FileText}
+                hint="Every download gets your buyer's name stamped into it automatically — nothing extra for you to do." />
+
+              {createError && <p className="text-sm text-center" style={{ color: '#ef4444' }}>{createError}</p>}
+              {createSuccess && <p className="text-sm text-center" style={{ color: 'var(--kurso-success)' }}>{createSuccess}</p>}
+
+              <button type="submit" disabled={uploading}
+                className="py-4 rounded-xl text-base font-bold text-white violet-gradient disabled:opacity-50 flex items-center justify-center gap-2">
+                <Upload className="w-5 h-5" />
+                {uploading ? 'Uploading...' : 'Add Ebook'}
+              </button>
+            </form>
+          )}
+        </div>
       </main>
     </div>
   )
