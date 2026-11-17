@@ -63,6 +63,21 @@ export default function WorkshopRegisterForm({
   const hasUpi = !!upiId
   const noPaymentAvailable = !isFree && !gatewayEnabled && !hasUpi
 
+  
+  // The server gives the Telegram link token only to the call that CREATES a registration. We keep it on this
+  // device and match it to the registration id the server returns later (a repeat visit or a payment retry).
+  const tgKey = `kurso_ws_tg_${workshopId}`
+  function saveTelegramToken(regId: string | undefined, token: string) {
+    setTelegramToken(token)
+    try { if (regId) window.localStorage.setItem(tgKey, JSON.stringify({ registrationId: regId, token })) } catch {}
+  }
+  function restoreTelegramToken(regId: string | undefined) {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(tgKey) || 'null')
+      if (saved?.token && regId && saved.registrationId === regId) setTelegramToken(saved.token)
+    } catch {}
+  }
+
   async function applyCoupon() {
     const code = couponInput.trim()
     if (!code) { setCouponError('Enter your coupon code.'); return }
@@ -95,7 +110,14 @@ export default function WorkshopRegisterForm({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tg = params.get('tg')
-    if (tg) setTelegramToken(tg)
+        if (tg) setTelegramToken(tg)
+    else if (params.get('order_id')) {
+      // Back from the payment page on the same device: the token was saved when the payment was started.
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(tgKey) || 'null')
+        if (saved?.token) setTelegramToken(saved.token)
+      } catch {}
+    }
     const ref = params.get('ref')
     if (ref) setRefCode(ref)
     if (params.get('status') === 'cancelled') {
@@ -126,7 +148,8 @@ export default function WorkshopRegisterForm({
     if (!res.ok) throw new Error(data.error || 'Registration failed')
 
     setRegistrationId(data.registrationId)
-    if (data.telegramToken) setTelegramToken(data.telegramToken)
+    if (data.telegramToken) saveTelegramToken(data.registrationId, data.telegramToken)
+    else restoreTelegramToken(data.registrationId)
     if (data.metaLeadEventId) trackMetaLead(data.metaLeadEventId, workshopTitle)
     setStep(data.paymentStatus === 'confirmed' ? 'success' : 'pay')
   }
@@ -140,7 +163,8 @@ export default function WorkshopRegisterForm({
     const data = await res.json()
     if (!res.ok || data.error) throw new Error(data.error || 'Could not start the payment')
 
-    if (data.telegramToken) setTelegramToken(data.telegramToken)
+    if (data.telegramToken) saveTelegramToken(data.registrationId, data.telegramToken)
+    else restoreTelegramToken(data.registrationId)
     if (data.registrationId) setRegistrationId(data.registrationId)
     if (data.metaLeadEventId) trackMetaLead(data.metaLeadEventId, workshopTitle)
     if (data.alreadyRegistered) { setStep('success'); return }

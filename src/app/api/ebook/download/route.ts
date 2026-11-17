@@ -7,6 +7,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/** Takes one download slot atomically: the update only succeeds if nobody else changed the count first. */
+async function claimDownload(id: string, limit: number): Promise<boolean> {
+  for (let i = 0; i < 5; i++) {
+    const { data: cur } = await supabase.from('transactions').select('ebook_download_count').eq('id', id).single()
+    if (!cur || cur.ebook_download_count >= limit) return false
+    const { data: won } = await supabase
+      .from('transactions')
+      .update({ ebook_download_count: cur.ebook_download_count + 1 })
+      .eq('id', id)
+      .eq('ebook_download_count', cur.ebook_download_count)
+      .select('id')
+    if (won && won.length) return true
+  }
+  return false
+}
+
 export async function GET(req: NextRequest) {
   const purchaseId = req.nextUrl.searchParams.get('purchaseId')
   if (!purchaseId) return NextResponse.json({ error: 'Missing purchaseId' }, { status: 400 })
@@ -30,6 +46,9 @@ export async function GET(req: NextRequest) {
   const { data: fileBlob, error: downloadError } = await supabase.storage.from('ebook-files').download(ebook.pdf_storage_path)
   if (downloadError || !fileBlob) return NextResponse.json({ error: 'Could not load the file' }, { status: 500 })
 
+    if (!(await claimDownload(purchase.id, purchase.ebook_download_limit))) {
+    return NextResponse.json({ error: 'Download limit reached. Contact the creator to reset it.' }, { status: 403 })
+  }  
   const sourceBytes = new Uint8Array(await fileBlob.arrayBuffer())
   const stamped = await stampEbookPdf(sourceBytes, {
     buyerName: purchase.student_name || 'Reader',
@@ -37,7 +56,7 @@ export async function GET(req: NextRequest) {
     orderId: purchase.id,
   })
 
-  await supabase.from('transactions').update({ ebook_download_count: purchase.ebook_download_count + 1 }).eq('id', purchase.id)
+    await supabase.from('transactions').update({ ebook_download_count: purchase.ebook_download_count + 1 }).eq('id', purchase.id)
   await supabase.from('ebook_downloads').insert({ purchase_id: purchase.id, ip_address: req.headers.get('x-forwarded-for') || null })
 
   return new NextResponse(Buffer.from(stamped), {

@@ -46,3 +46,8 @@ export function normalizePhone(raw: string | null | undefined): string | null {
 
   return digits || null
 }
+
+/** A usable phone: 10–15 digits after normalizing. */
+export function isValidPhone(p: string | null): p is string {
+  return !!p && p.length >= 10 && p.length <= 15
+}

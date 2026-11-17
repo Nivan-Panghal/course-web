@@ -194,6 +194,14 @@ export async function POST(req: NextRequest) {
           .update({ is_published: true, auto_unpublished_at: null, auto_unpublished_reason: null })
           .eq('creator_id', invoice.creator_id)
           .eq('auto_unpublished_reason', 'revenue_share_overdue')
+          
+        // The same invoice covers webinar revenue, so webinars the sweep paused re-open too.
+        // Only 'draft' ones: a webinar the creator cancelled after the pause stays cancelled.
+        await supabaseAdmin.from('workshops')
+          .update({ status: 'published', auto_unpublished_at: null, auto_unpublished_reason: null })
+          .eq('creator_id', invoice.creator_id)
+          .eq('status', 'draft')
+          .eq('auto_unpublished_reason', 'revenue_share_overdue')
       }
 
       return NextResponse.json({ received: true, message: 'Revenue-share invoice paid' })
