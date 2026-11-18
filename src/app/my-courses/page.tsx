@@ -136,6 +136,8 @@ export default function MyCoursesPage() {
           const { data } = await query
           if (!data) return
           for (const e of data) {
+            // A refunded purchase no longer gives access, so it is not listed.
+            if (e.payment_status === 'refunded') continue
             if (!seen.has(e.course_uuid)) {
               seen.add(e.course_uuid)
               allEnrollments.push(e)

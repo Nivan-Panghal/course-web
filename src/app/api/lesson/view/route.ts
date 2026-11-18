@@ -112,6 +112,14 @@ export async function GET(req: NextRequest) {
 
   if (enrollment?.phone) studentName = enrollment.phone
 
+  // Rule (c): a refund removes access at once, even for a link that has not expired yet.
+  if (enrollment?.payment_status === 'refunded') {
+    return new NextResponse(invalidLinkHtml(), {
+      status: 403,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, private' },
+    })
+  }
+
   // Module release schedule (drip). Links signed before a module was locked stay
   // cryptographically valid for their 2h lifetime, so the lock is enforced here too.
   if (!isLessonFree({ is_free: lesson.is_free ?? false }, { is_free_course: course?.is_free_course ?? false })) {

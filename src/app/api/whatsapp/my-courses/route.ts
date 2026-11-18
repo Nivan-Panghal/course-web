@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
       .from('enrollments')
       .select('id, current_lesson, completed_lessons, payment_status, enrolled_at, courses:course_uuid(id, name, host_name, total_lessons)')
       .eq('phone', phone)
+      .neq('payment_status', 'refunded')
       .order('enrolled_at', { ascending: false })
 
     if (error) throw error
