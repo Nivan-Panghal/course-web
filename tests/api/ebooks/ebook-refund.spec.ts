@@ -6,7 +6,8 @@
  *
  * Rules:
  *  - Only a PAID purchase of an ebook that offers refunds, inside its refund window, can ask. One request per purchase.
- *  - Only the owning creator can decide. A request is decided once.
+ *  - Only the owning creator can decide. A request is decided once, and a second tap while the first is still
+ *    being processed is refused (the request is claimed first). If the gateway refuses, it goes back to pending.
  *  - If the money cannot be refunded (no payment record, or the gateway refuses), nothing changes:
  *    the buyer keeps their download and no refund is recorded as done.
  *  - (c) Once refunded, the purchase can no longer be downloaded (covered by EBK-012 and EWH-009).
@@ -150,5 +151,36 @@ test.describe('resetting downloads', () => {
     const { p } = await purchase({ status: 'refunded', downloadCount: 2 })
     await request.post(RESET, { headers: auth, data: { purchaseId: p.id } })
     expect((await request.get(`/api/ebook/download?purchaseId=${p.id}`)).status()).toBe(402)
+  })
+})
+test.describe('double tap and failed refunds', () => {
+  async function pendingRequest(request: any) {
+    const s = await purchase()
+    await ask(request, s.p.id)
+    return { ...s, row: await requestFor(s.p.id) }
+  }
+  async function withPayment(s: any) {
+    const rrn = `pay_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    await db().from('transactions').update({ rrn }).eq('id', s.p.id)
+    const { data: pay } = await db().from('payments').insert({
+      creator_id: creator.id, product_type: 'ebook', ebook_id: s.ebook.id, provider: 'razorpay', provider_payment_id: rrn, provider_order_id: `order_${rrn}`,
+      currency: 'INR', gross_amount: 299, discount_amount: 0, net_amount: 299, platform_fee: 0, creator_earning: 299, status: 'paid', paid_at: new Date().toISOString(),
+    }).select().single()
+    return pay!
+  }
+  test('ERF-016 a request already being processed cannot be approved again, and no second refund is started', async ({ request }) => {
+    const s = await pendingRequest(request)
+    const pay = await withPayment(s)
+    await db().from('refund_requests').update({ status: 'approved' }).eq('id', s.row.id) // a first tap is in flight
+    const res = await decide(request, auth, { requestId: s.row.id, decision: 'approved' })
+    expect(res.status()).toBe(400)
+    expect(((await db().from('refunds').select('id').eq('payment_id', pay.id)).data ?? [])).toHaveLength(0)
+  })
+  test('ERF-017 when the gateway refuses, the request goes back to pending so it can be retried', async ({ request }) => {
+    const s = await pendingRequest(request)
+    await withPayment(s)
+    const res = await decide(request, auth, { requestId: s.row.id, decision: 'approved' })
+    expect(res.status(), 'fake gateway keys: the gateway must refuse').not.toBe(200)
+    expect((await requestFor(s.p.id)).status).toBe('pending')
   })
 })
