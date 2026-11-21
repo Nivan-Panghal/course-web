@@ -247,9 +247,19 @@ export async function decideEbookRefundRequest({ requestId, creatorId, decision,
     return { ok: true, message: 'Request denied.' }
   }
 
+  // Claim the request first, so a double tap can never send two refunds.
+  const { data: claimed } = await supabase
+    .from('refund_requests')
+    .update({ status: 'approved', decided_at: new Date().toISOString(), decided_by: 'creator' })
+    .eq('id', requestId)
+    .eq('status', 'pending')
+    .select('id')
+  if (!claimed || claimed.length === 0) return { ok: false, status: 400, error: 'This request has already been decided' }
+  const release = () => supabase.from('refund_requests').update({ status: 'pending', decided_at: null, decided_by: null }).eq('id', requestId)
+
   const { data: purchase } = await supabase.from('transactions').select('id, ebook_id, rrn, ebook_download_count').eq('id', request.purchase_id).maybeSingle()
-  if (!purchase) return { ok: false, status: 404, error: 'Purchase not found' }
-  if (!purchase.rrn) return { ok: false, status: 404, error: 'No completed payment record found for this purchase — cannot refund automatically. Please refund manually from your gateway dashboard.' }
+  if (!purchase) { await release(); return { ok: false, status: 404, error: 'Purchase not found' } }
+  if (!purchase.rrn) { await release(); return { ok: false, status: 404, error: 'No completed payment record found for this purchase — cannot refund automatically. Please refund manually from your gateway dashboard.' } }
 
   // transactions and payments are two separate tables written by the same
   // webhook event — they don't share a foreign key, but both get the
@@ -264,20 +274,21 @@ export async function decideEbookRefundRequest({ requestId, creatorId, decision,
     .eq('status', 'paid')
     .maybeSingle()
 
-  if (!payment) return { ok: false, status: 404, error: 'No completed payment record found for this purchase — cannot refund automatically. Please refund manually from your gateway dashboard.' }
+  if (!payment) { await release(); return { ok: false, status: 404, error: 'No completed payment record found for this purchase — cannot refund automatically. Please refund manually from your gateway dashboard.' } }
 
   const { data: refundRows } = await supabase.from('refunds').select('amount, status').eq('payment_id', payment.id)
   const alreadyRefunded = (refundRows || []).filter(r => r.status === 'succeeded').reduce((sum, r) => sum + Number(r.amount), 0)
   const refundable = Number(payment.net_amount) - alreadyRefunded
 
   const requestedAmount = amount === undefined || amount === null ? refundable : Number(amount)
-  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) return { ok: false, status: 400, error: 'Enter a valid refund amount.' }
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) { await release(); return { ok: false, status: 400, error: 'Enter a valid refund amount.' } }
   if (requestedAmount > refundable + 0.01) {
+    await release()
     return { ok: false, status: 400, error: `You can refund at most ₹${refundable.toLocaleString('en-IN')} on this payment.` }
   }
 
   const gateway = await getCreatorGatewayByProvider(creatorId, payment.provider as 'cashfree' | 'razorpay' | 'stripe')
-  if (!gateway) return { ok: false, status: 409, error: `Your ${payment.provider} connection isn't active — reconnect it in Settings before issuing refunds.` }
+  if (!gateway) { await release(); return { ok: false, status: 409, error: `Your ${payment.provider} connection isn't active — reconnect it in Settings before issuing refunds.` } }
 
   const refundId = randomUUID()
   // The refunds table has no purchase_id column (the old insert asked for one, so it always failed).
@@ -289,6 +300,7 @@ export async function decideEbookRefundRequest({ requestId, creatorId, decision,
   // If the record cannot be saved, stop here. Sending money without a record would let the same payment be refunded twice.
   if (refundInsertError) {
     console.error('[refund] could not save the refund record:', refundInsertError.message)
+    await release()
     return { ok: false, status: 500, error: 'We could not record this refund, so nothing was sent. Please try again.' }
   }
 
@@ -315,6 +327,7 @@ export async function decideEbookRefundRequest({ requestId, creatorId, decision,
   } catch (err: any) {
     const msg = err instanceof RefundExecutionError ? err.message : 'The payment gateway rejected this refund. No money was moved and nothing was changed — please try again or refund manually from your gateway dashboard.'
     await supabase.from('refunds').update({ status: 'failed', error_message: msg }).eq('id', refundId)
+    await release()
     return { ok: false, status: 502, error: msg }
   }
 }

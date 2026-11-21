@@ -10,11 +10,31 @@ export async function POST(req: NextRequest) {
   try {
     const { enrollmentId, token, expiresAt } = await req.json()
 
-    if (!enrollmentId || !token) {
+    if (!enrollmentId || !token || typeof token !== 'string') {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { error, data, count } = await supabase
+    // The token must be one our own create-token route issued, still unused and
+    // unexpired, for the SAME course as this enrollment.
+    const { data: enr } = await supabase
+      .from('enrollments')
+      .select('id, course_uuid')
+      .eq('id', enrollmentId)
+      .maybeSingle()
+    if (!enr) return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
+
+    const { data: issued } = await supabase
+      .from('whatsapp_tokens')
+      .select('course_slug')
+      .eq('token', token)
+      .eq('used', false)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    if (!issued || (enr.course_uuid && issued.course_slug !== enr.course_uuid)) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
+    }
+
+    const { error } = await supabase
       .from('enrollments')
       .update({
         whatsapp_start_token: token,
@@ -22,16 +42,8 @@ export async function POST(req: NextRequest) {
           expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       })
       .eq('id', enrollmentId)
-      .select('id')
 
-    if (error) {
-      console.error('[save-enrollment-token:whatsapp] update failed for enrollmentId', enrollmentId, error.message)
-      throw error
-    }
-    if (!data || data.length === 0) {
-      // The update ran but matched zero rows — wrong/stale enrollmentId.
-      console.error('[save-enrollment-token:whatsapp] no enrollment row matched id', enrollmentId, '— token was NOT saved')
-    }
+    if (error) throw error
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

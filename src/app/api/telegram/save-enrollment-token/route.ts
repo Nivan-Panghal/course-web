@@ -10,8 +10,28 @@ export async function POST(req: NextRequest) {
   try {
     const { enrollmentId, token, expiresAt } = await req.json()
 
-    if (!enrollmentId || !token) {
+    if (!enrollmentId || !token || typeof token !== 'string') {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // The token must be one our own create-token route issued, still unused and
+    // unexpired, for the SAME course as this enrollment.
+    const { data: enr } = await supabase
+      .from('enrollments')
+      .select('id, course_uuid')
+      .eq('id', enrollmentId)
+      .maybeSingle()
+    if (!enr) return NextResponse.json({ error: 'Enrollment not found' }, { status: 404 })
+
+    const { data: issued } = await supabase
+      .from('telegram_tokens')
+      .select('course_id')
+      .eq('token', token)
+      .eq('used', false)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    if (!issued || (enr.course_uuid && issued.course_id !== enr.course_uuid)) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
     }
 
     const { error } = await supabase
