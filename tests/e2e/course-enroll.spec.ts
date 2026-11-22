@@ -97,3 +97,23 @@ test('ENR-E07 an UNPUBLISHED course offers no Enroll button to visitors', async 
   await page.waitForLoadState('networkidle')
   await expect(page.getByRole('button', { name: /^Enroll/ })).toHaveCount(0)
 })
+test('ENR-E08 after enrolling, the popup asks for the Telegram link WITH the student\'s login, and gets it', async ({ page }) => {
+  await db().from('creators').update({ telegram_bot_username: 'kurso_test_bot' }).eq('id', creator.id)
+  const calls: { auth?: string; status?: number }[] = []
+  page.on('request', (r) => { if (r.url().includes('/api/telegram/create-token')) calls.push({ auth: r.headers()['authorization'] }) })
+  page.on('response', (r) => {
+    if (r.url().includes('/api/telegram/create-token')) {
+      const c = calls.find((x) => x.status === undefined)
+      if (c) c.status = r.status()
+    }
+  })
+  const popup = await openEnrollPopup(page, freeCourse.id)
+  await fillSignup(popup, { email: uiEmail(), phone: uiPhone() })
+  await popup.getByRole('button', { name: 'Enroll for Free' }).click()
+  await expect(popup.getByText(/You're Enrolled/)).toBeVisible({ timeout: 45_000 })
+  await expect.poll(() => calls.filter((c) => c.status !== undefined).length, { timeout: 20_000 }).toBeGreaterThan(0)
+  for (const c of calls) {
+    expect(c.auth).toMatch(/^Bearer .{20,}/)
+    expect(c.status).toBe(200)
+  }
+})
