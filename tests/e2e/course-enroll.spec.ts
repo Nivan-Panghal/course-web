@@ -99,11 +99,11 @@ test('ENR-E07 an UNPUBLISHED course offers no Enroll button to visitors', async 
 })
 test('ENR-E08 after enrolling, the popup asks for the Telegram link WITH the student\'s login, and gets it', async ({ page }) => {
   await db().from('creators').update({ telegram_bot_username: 'kurso_test_bot' }).eq('id', creator.id)
-  const calls: { auth?: string; status?: number }[] = []
-  page.on('request', (r) => { if (r.url().includes('/api/telegram/create-token')) calls.push({ auth: r.headers()['authorization'] }) })
+  const calls: { req: any; status?: number }[] = []
+  page.on('request', (r) => { if (r.url().includes('/api/telegram/create-token')) calls.push({ req: r }) })
   page.on('response', (r) => {
     if (r.url().includes('/api/telegram/create-token')) {
-      const c = calls.find((x) => x.status === undefined)
+      const c = calls.find((x) => x.req === r.request())
       if (c) c.status = r.status()
     }
   })
@@ -113,7 +113,30 @@ test('ENR-E08 after enrolling, the popup asks for the Telegram link WITH the stu
   await expect(popup.getByText(/You're Enrolled/)).toBeVisible({ timeout: 45_000 })
   await expect.poll(() => calls.filter((c) => c.status !== undefined).length, { timeout: 20_000 }).toBeGreaterThan(0)
   for (const c of calls) {
-    expect(c.auth).toMatch(/^Bearer .{20,}/)
+    const h = await c.req.allHeaders()
+    const state = await page.evaluate(() => ({
+      installed: (window as any).__kursoAuthFetch === true,
+      hasSession: Object.keys(localStorage).some((k) => k.includes('auth-token')),
+    }))
+    expect(
+      !!h['authorization'],
+      `no Authorization header. url=${c.req.url()} status=${c.status} page=${JSON.stringify(state)} headers=${Object.keys(h).join(',')}`
+    ).toBe(true)
+    expect(h['authorization']).toMatch(/^Bearer .{20,}/)
     expect(c.status).toBe(200)
   }
+})
+
+test('ENR-E09 a UAE student (9-digit number) can enroll, and the number is stored with the country code', async ({ page }) => {
+  const email = uiEmail()
+  const popup = await openEnrollPopup(page, freeCourse.id)
+  await popup.getByRole('button', { name: /\+91/ }).click()
+  await page.getByPlaceholder('Search country...').fill('Emirates')
+  await page.getByRole('button', { name: /United Arab Emirates/ }).click()
+  const local = '5' + String(Date.now()).slice(-8)
+  await fillSignup(popup, { email, phone: local })
+  await popup.getByRole('button', { name: 'Enroll for Free' }).click()
+  await expect(popup.getByText(/You're Enrolled/)).toBeVisible({ timeout: 45_000 })
+  const rows = await enrollmentsFor(freeCourse.id)
+  expect(rows.some((e: any) => e.phone === '971' + local)).toBe(true)
 })
