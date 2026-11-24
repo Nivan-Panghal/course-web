@@ -8,9 +8,11 @@ account with its own owner, and stands up in the time noted.
 ## 1. Supabase (~10 minutes)
 Create a project at supabase.com. All three repos connect to this one
 project. From Project Settings → API, copy the URL, anon key, and
-service-role key. There is no schema migration file to run — request a
-current schema export separately and apply it in the SQL editor before
-running any repo against a fresh project.
+service-role key. The complete database (tables, row-level-security
+policies, triggers and functions) is handed over with the sale — restore it
+into your own project before running any repo. Keep a second, empty project
+for the automated tests (see `tests/README.md`); never point tests at
+production.
 
 ## 2. Cloudflare R2 (~10 minutes)
 Create an R2 bucket in the Cloudflare dashboard, then an API token scoped
@@ -19,8 +21,17 @@ PDF, and ebook file is actually stored.
 
 ## 3. Vercel — hosting `course-web` (~10 minutes)
 Import the repo, set every variable from `course-web/.env.example`, deploy.
-Cron jobs are already defined in `vercel.json` and start running
-automatically once deployed — no separate setup.
+Seven daily cron jobs are already defined in `vercel.json` (subscription and
+invoice sweeps, lesson and workshop reminders, module unlocks, inactivity
+nudges, recording notices, chat retention) and start running automatically
+once deployed. Set `CRON_SECRET` first: every job refuses calls without it.
+Vercel limits how many cron jobs a plan allows, so check that your plan
+covers seven.
+
+Also create a free Upstash Redis database (upstash.com/redis) and copy its
+REST URL and token into `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
+Video streaming still works without it, but the abuse rate limiter and the
+enrollment cache stay off.
 
 ## 4. Hosting the two bots (~15 minutes)
 Any host that runs a persistent Node.js process works — Render and
@@ -46,7 +57,9 @@ This is the most involved setup step. In order:
    most likely to take real time (identity/business document review).
 4. From API Setup, copy the Phone Number ID and generate a permanent
    System User access token (temporary tokens expire in 24 hours and are
-   not usable for a live deployment).
+   not usable for a live deployment). Also copy the App Secret (App
+   settings, Basic) into `META_APP_SECRET`: the bot checks Meta's signature
+   on every webhook and refuses all messages without it.
 5. Set up the webhook: point it at `<your-whatsapp-bot-url>/webhook/whatsapp`.
    Pick `META_WEBHOOK_VERIFY_TOKEN` yourself — any random string works here,
    Meta has no character restriction, but a 32–64 character random value is
@@ -110,10 +123,12 @@ enough.
 Sign up at resend.com, verify a sending domain, generate an API key.
 
 ## 9. Gemini API key (~5 minutes)
-Create a key at Google AI Studio (aistudio.google.com). Powers the AI
-Doubt Assistant feature — this is the only AI key this platform actually
-uses. `ANTHROPIC_API_KEY` and `DEEPSEEK_API_KEY` are also referenced in
-the code but are not currently used — leave them unset.
+Create a key at Google AI Studio (aistudio.google.com). It powers the AI
+Doubt Assistant and the creator AI writing helper, and is the only AI key
+you need. Two optional keys add resilience: `DEEPSEEK_API_KEY` is a
+fallback when Gemini fails (Doubt Assistant and creator helper), and
+`ANTHROPIC_API_KEY` enables a second stage of Q&A comment moderation (that
+stage is skipped when unset).
 
 ## Hardcoded values to find and change
 

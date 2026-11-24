@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { loadCashfreeSdk, loadRazorpaySdk, pollOrderStatus } from '@/lib/checkout-client'
 import { trackMetaLead } from '@/components/MetaPixel'
+import { COUNTRIES } from '@/lib/countries'
 
 interface Props {
   workshopId: string
@@ -42,6 +43,7 @@ export default function WorkshopRegisterForm({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [country, setCountry] = useState(COUNTRIES[0])
   const [utr, setUtr] = useState('')
   const [method, setMethod] = useState<PayMethod>(gatewayEnabled ? 'gateway' : 'upi_manual')
   const [registrationId, setRegistrationId] = useState('')
@@ -237,8 +239,8 @@ export default function WorkshopRegisterForm({
     e.preventDefault()
     setError('')
     const cleanedPhone = phone.trim().replace(/\D/g, '')
-    if (cleanedPhone.length !== 10) {
-      setError('Please enter a valid 10-digit WhatsApp number')
+    if (cleanedPhone.length !== country.length) {
+      setError(`Please enter a valid ${country.length}-digit WhatsApp number`)
       return
     }
     const mode: 'free' | 'upi_manual' | 'gateway' = isFree ? 'free' : method
@@ -248,7 +250,7 @@ export default function WorkshopRegisterForm({
     }
     setLoading(true)
     try {
-      const fullPhone = '91' + cleanedPhone
+      const fullPhone = country.code.replace('+', '') + cleanedPhone
       if (mode === 'gateway') await startGatewayPayment(fullPhone)
       else await registerDirect(mode, fullPhone)
     } catch (err: any) {
@@ -411,11 +413,19 @@ export default function WorkshopRegisterForm({
         className="ws-field w-full px-4 py-3 rounded-xl text-sm outline-none" style={inputStyle}
       />
       <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid var(--ws-field-border, rgba(255,255,255,0.1))' }}>
-        <span className="flex items-center px-3 text-sm font-semibold" style={NOTICE_STYLE}>+91</span>
+        <select
+          aria-label="Country code" value={country.name}
+          onChange={e => { setCountry(COUNTRIES.find(c => c.name === e.target.value) || COUNTRIES[0]); setPhone('') }}
+          className="w-[7.5rem] shrink-0 px-1 text-[13px] font-semibold outline-none" style={{ ...NOTICE_STYLE, border: 0 }}
+        >
+          {COUNTRIES.map(c => (
+            <option key={c.name} value={c.name} style={{ color: '#111', background: '#fff' }}>{c.flag} {c.name} ({c.code})</option>
+          ))}
+        </select>
         <input
-          value={phone} onChange={e => setPhone(e.target.value)} required
-          placeholder="WhatsApp number" inputMode="numeric" maxLength={10}
-          className="ws-field flex-1 px-4 py-3 text-sm outline-none"
+          value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ''))} required
+          placeholder="WhatsApp number" inputMode="numeric" maxLength={country.length}
+          className="ws-field min-w-0 flex-1 px-4 py-3 text-sm outline-none"
           style={{ background: 'var(--ws-field-bg, rgba(255,255,255,0.05))', ...TEXT }}
         />
       </div>
