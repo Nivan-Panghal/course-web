@@ -1,8 +1,8 @@
 /**
  * ═══════════════════════════════════════════════════════════════════
- * Set this up in Vercel dashboard → Settings → Cron Jobs (or vercel.json):
+ * Scheduled by vercel.json:
  *   Path:     /api/cron/live-session-recording-notify
- *   Schedule: 0 6 * * *   (once a day — any time works)
+ *   Schedule: once a day
  *
  * WHAT THIS DOES:
  * Finds every live_sessions row whose scheduled end time
@@ -11,16 +11,20 @@
  * enrolled student exactly one message:
  *   - a link to the recording, if the creator has uploaded one
  *   - "not available yet, we'll notify you" otherwise
- * Marks recording_notified_at once sent so it never re-notifies for the
- * same session, even across multiple daily runs. This is deliberately
- * a ONE-TIME notification per session, not a repeating nag — a student
- * who missed the "not available yet" message can still find the
- * recording via their dashboard once it's uploaded.
+ *
+ * The session is CLAIMED (recording_notified_at set) before anything is sent, so two overlapping runs
+ * can never message the same students twice. This is deliberately a ONE-TIME notification per session,
+ * not a repeating nag. Students are read in pages of 500, so classes of any size are reached.
  * ═══════════════════════════════════════════════════════════════════
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { signLiveSessionRecordingPageUrl } from '@/lib/signer'
+
+export const maxDuration = 60
+
+const PAGE_SIZE = 500
+const SEND_CONCURRENCY = 10
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +39,7 @@ async function sendViaBot(
   const baseUrl = channel === 'whatsapp' ? process.env.WHATSAPP_BOT_URL : process.env.TELEGRAM_BOT_URL
   const secret = process.env.INTERNAL_BOT_SECRET
   if (!baseUrl || !secret) {
-    console.warn(`[live-recording-notify] ${channel} bot URL/secret not configured, skipping send to ${identity}`)
+    console.warn(`[live-recording-notify] ${channel} bot URL/secret not configured, skipping send`)
     return false
   }
   try {
@@ -45,7 +49,7 @@ async function sendViaBot(
       body: JSON.stringify({ identity, ...fields }),
     })
     if (!res.ok) {
-      console.error(`[live-recording-notify] ${channel} bot rejected send for ${identity}:`, res.status, await res.text().catch(() => ''))
+      console.error(`[live-recording-notify] ${channel} bot rejected a send:`, res.status, await res.text().catch(() => ''))
       return false
     }
     return true
@@ -82,45 +86,58 @@ export async function GET(req: NextRequest) {
     const endsAt = new Date(session.scheduled_at).getTime() + (session.duration_minutes || 0) * 60 * 1000
     if (Date.now() < endsAt) continue // hasn't actually ended yet, leave it for tomorrow's run
 
+    // Claim first: only the run that flips recording_notified_at from NULL sends.
+    const { data: claimed } = await supabase
+      .from('live_sessions')
+      .update({ recording_notified_at: new Date().toISOString() })
+      .eq('id', session.id)
+      .is('recording_notified_at', null)
+      .select('id')
+    if (!claimed || claimed.length === 0) continue
+
     const courseName = (session as any).courses?.name || 'your course'
     const hasRecording = !!(session.recording_url || session.recording_storage_path)
 
-    const { data: students, error: studentsError } = await supabase
-      .from('enrollments')
-      .select('phone, telegram_chat_id, students(reminder_channel)')
-      .eq('course_uuid', session.course_id)
-      .eq('payment_status', 'paid')
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: students, error: studentsError } = await supabase
+        .from('enrollments')
+        .select('id, phone, telegram_chat_id, students(reminder_channel)')
+        .eq('course_uuid', session.course_id)
+        .eq('payment_status', 'paid')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (studentsError) {
-      console.error(`[live-recording-notify] failed to fetch students for session ${session.id}:`, studentsError)
-      continue
+      if (studentsError) {
+        console.error(`[live-recording-notify] failed to fetch students for session ${session.id}:`, studentsError)
+        // Nothing was sent yet: give the claim back so tomorrow's run retries. Later pages: keep the claim,
+        // re-running would message the first pages again.
+        if (from === 0) await supabase.from('live_sessions').update({ recording_notified_at: null }).eq('id', session.id)
+        break
+      }
+
+      const rows = students || []
+      for (let i = 0; i < rows.length; i += SEND_CONCURRENCY) {
+        const results = await Promise.all(
+          rows.slice(i, i + SEND_CONCURRENCY).map(async (s: any) => {
+            const channel = s.students?.reminder_channel as 'whatsapp' | 'telegram' | undefined
+            const identity = channel === 'telegram' ? s.telegram_chat_id : s.phone
+            if (!channel || !identity) return null
+            // The link is unique per student (their own signed identity), so it always resolves to the
+            // *current* recording state at the moment they click.
+            const recordingLink = signLiveSessionRecordingPageUrl(session.id, String(identity))
+            return sendViaBot(channel, String(identity), { sessionTitle: session.title, courseName, hasRecording, recordingLink })
+          })
+        )
+        for (const ok of results) {
+          if (ok === null) continue
+          if (ok) messagesSent++
+          else messagesFailed++
+        }
+      }
+
+      if (rows.length < PAGE_SIZE) break
     }
 
-    for (const s of students || []) {
-      const channel = (s as any).students?.reminder_channel as 'whatsapp' | 'telegram' | undefined
-      const identity = channel === 'telegram' ? s.telegram_chat_id : s.phone
-      if (!channel || !identity) continue
-
-      // The link is unique per student (their own signed identity), so
-      // it always resolves to the *current* recording state at the
-      // moment they click — even if uploaded well after this cron ran.
-      const recordingLink = signLiveSessionRecordingPageUrl(session.id, String(identity))
-
-      const ok = await sendViaBot(channel, String(identity), {
-        sessionTitle: session.title,
-        courseName,
-        hasRecording,
-        recordingLink,
-      })
-      if (ok) messagesSent++
-      else messagesFailed++
-    }
-
-    // Marked once per session regardless of individual send failures —
-    // a bot being briefly down shouldn't cause this to loop forever;
-    // students who missed it can still reach the recording from their
-    // dashboard once it's uploaded.
-    await supabase.from('live_sessions').update({ recording_notified_at: new Date().toISOString() }).eq('id', session.id)
     sessionsProcessed++
   }
 

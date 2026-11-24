@@ -6,14 +6,11 @@
  *
  * Those routes only hand a link to the account it belongs to, so they need to know who is asking.
  * Doing it here, once, means every place that asks for a link (enroll popup, My Learning, course page,
- * creator test mode) is covered without each one adding the header. Only those two same-site URLs are
- * touched, and only when the request does not already carry an Authorization header. If nobody is
- * signed in, nothing is added (people with no web account can still use /claim/telegram).
- *
- * The patch is installed when this file loads AND when the component mounts, so it is in place before
- * any component can ask for a link.
+ * creator test mode) is covered without each one adding the header. The patch runs when this file loads,
+ * which is before any component asks. Only those two same-site URLs are touched, and only when the
+ * request does not already carry an Authorization header. If nobody is signed in, nothing is added
+ * (people with no web account can still use /claim/telegram).
  */
-import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const TARGETS = new Set(['/api/telegram/create-token', '/api/whatsapp/create-token'])
@@ -24,8 +21,7 @@ declare global {
   }
 }
 
-function install() {
-  if (typeof window === 'undefined' || window.__kursoAuthFetch) return
+if (typeof window !== 'undefined' && !window.__kursoAuthFetch) {
   window.__kursoAuthFetch = true
   const original = window.fetch.bind(window)
 
@@ -48,9 +44,6 @@ function install() {
   }
 }
 
-install()
-
 export default function AuthFetchInstaller() {
-  useEffect(() => { install() }, [])
   return null
 }

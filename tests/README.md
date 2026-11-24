@@ -12,7 +12,8 @@ Everything here runs against the **kurso-test** Supabase project, never live.
 | `npm run test:smoke` | Phase 0 check that the machinery works |
 | `npm run test:unit` | Pure logic (locks, commission math, phone format) |
 | `npm run test:api` | API routes, webhooks, cron |
-| `npm run test:integration` | Multi-step flows with the database |
+| `npm run test:| `api/cron/` | Every scheduled job listed in `vercel.json` exists and refuses calls without the secret |
+| `integration/` | Commission split across the money flows |
 | `npm run test:e2e` | Real browser journeys |
 | `npm run test:report` | Opens the last HTML report |
 

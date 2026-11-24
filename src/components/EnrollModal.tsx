@@ -7,25 +7,7 @@ import { slugify } from '@/lib/utils'
 import { useBrandVars } from '@/components/BrandVarsContext'
 import { useWhatsAppNumber } from '@/lib/use-whatsapp-number'
 
-// `length` = expected number of digits for that country's mobile number,
-// EXCLUDING the country code. Used to validate/cap the phone input instead
-// of assuming every country is 10 digits like India.
-const COUNTRIES = [
-  { name: 'India', code: '+91', flag: '🇮🇳', length: 10 },
-  { name: 'United States', code: '+1', flag: '🇺🇸', length: 10 },
-  { name: 'United Kingdom', code: '+44', flag: '🇬🇧', length: 10 },
-  { name: 'United Arab Emirates', code: '+971', flag: '🇦🇪', length: 9 },
-  { name: 'Australia', code: '+61', flag: '🇦🇺', length: 9 },
-  { name: 'Canada', code: '+1', flag: '🇨🇦', length: 10 },
-  { name: 'Singapore', code: '+65', flag: '🇸🇬', length: 8 },
-  { name: 'Germany', code: '+49', flag: '🇩🇪', length: 11 },
-  { name: 'France', code: '+33', flag: '🇫🇷', length: 9 },
-  { name: 'Saudi Arabia', code: '+966', flag: '🇸🇦', length: 9 },
-  { name: 'Pakistan', code: '+92', flag: '🇵🇰', length: 10 },
-  { name: 'Bangladesh', code: '+880', flag: '🇧🇩', length: 10 },
-  { name: 'Nepal', code: '+977', flag: '🇳🇵', length: 10 },
-  { name: 'Sri Lanka', code: '+94', flag: '🇱🇰', length: 9 },
-]
+import { COUNTRIES } from '@/lib/countries'
 
 function CountrySelector({ selected, onSelect }: { selected: any; onSelect: (c: any) => void }) {
   const [open, setOpen] = useState(false)
